@@ -49,7 +49,6 @@ import ghidra.app.context.ListingActionContext;
  */
 import ghidra.app.services.DataTypeManagerService;
 import ghidra.framework.plugintool.PluginTool;
-import ghidra.generic.function.Callback;
 import ghidra.program.database.symbol.EquateManager;
 import ghidra.program.model.data.DataTypeManager;
 import ghidra.program.model.data.Enum;
@@ -62,6 +61,7 @@ import ghidra.util.UniversalID;
 import ghidra.util.layout.HorizontalLayout;
 import ghidra.util.layout.VerticalLayout;
 import ghidra.util.table.*;
+import utility.function.Callback;
 
 public class SetEquateDialog extends DialogComponentProvider {
 	public static final int CANCELED = 0;
@@ -92,10 +92,9 @@ public class SetEquateDialog extends DialogComponentProvider {
 	/**
 	 * Constructor
 	 *
-	 * @param parent the parent frame to host the dialog.
-	 * @param plugin the EquatePlugin that launched this dialog(used to validate input)
-	 * @param labelText a text string indicating the numeric value being equated.
-	 * @param equates a list of equates that already exist for this numeric value.
+	 * @param tool the EquatePlugin that launched this dialog(used to validate input)
+	 * @param program the program the equate is located in.
+	 * @param value the equate value to set.
 	 */
 
 	public SetEquateDialog(PluginTool tool, Program program, Scalar value) {
@@ -359,7 +358,7 @@ public class SetEquateDialog extends DialogComponentProvider {
 		result = CANCELED;
 		overwriteExistingEquates.setVisible(true);
 		setTitle("Set Equate");
-		tool.showDialog(this, (Component) null);
+		tool.showDialog(this);
 		return result;
 	}
 
@@ -375,7 +374,7 @@ public class SetEquateDialog extends DialogComponentProvider {
 		overwriteExistingEquates.setVisible(false);
 		overwriteExistingEquates.setEnabled(false);
 		setTitle("Rename Equate");
-		tool.showDialog(this, (Component) null);
+		tool.showDialog(this);
 		return result;
 	}
 

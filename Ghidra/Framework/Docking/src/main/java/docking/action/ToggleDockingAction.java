@@ -1,6 +1,5 @@
 /* ###
  * IP: GHIDRA
- * REVIEWED: YES
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +19,6 @@ import javax.swing.JButton;
 import javax.swing.JMenuItem;
 
 import docking.*;
-import docking.menu.DockingCheckboxMenuItemUI;
 
 public abstract class ToggleDockingAction extends DockingAction implements ToggleDockingActionIf {
 	private boolean isSelected;
@@ -29,15 +27,24 @@ public abstract class ToggleDockingAction extends DockingAction implements Toggl
 		super(name, owner);
 	}
 
-	public ToggleDockingAction(String name, String owner, boolean isKeybindingManaged) {
-		super(name, owner, isKeybindingManaged);
+	public ToggleDockingAction(String name, String owner, KeyBindingType keyBindingType) {
+		super(name, owner, keyBindingType);
 	}
 
+	public ToggleDockingAction(String name, String owner, boolean supportsKeyBindings) {
+		super(name, owner, supportsKeyBindings);
+	}
+
+	@Override
 	public boolean isSelected() {
 		return isSelected;
 	}
 
+	@Override
 	public void setSelected(boolean newValue) {
+		if (isSelected == newValue) {
+			return;
+		}
 		isSelected = newValue;
 		firePropertyChanged(SELECTED_STATE_PROPERTY, !isSelected, isSelected);
 	}
@@ -51,13 +58,12 @@ public abstract class ToggleDockingAction extends DockingAction implements Toggl
 
 	@Override
 	protected JMenuItem doCreateMenuItem() {
-		DockingCheckBoxMenuItem menuItem = new DockingCheckBoxMenuItem(isSelected);
-		menuItem.setUI((DockingCheckboxMenuItemUI) DockingCheckboxMenuItemUI.createUI(menuItem));
-		return menuItem;
+		return new DockingCheckBoxMenuItem(isSelected);
 	}
 
 	@Override
 	public void actionPerformed(ActionContext context) {
 		// defined by subclasses
 	}
+
 }

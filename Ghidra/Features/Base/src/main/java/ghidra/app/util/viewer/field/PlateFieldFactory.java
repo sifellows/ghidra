@@ -27,6 +27,7 @@ import ghidra.app.util.HighlightProvider;
 import ghidra.app.util.viewer.format.FieldFormatModel;
 import ghidra.app.util.viewer.listingpanel.ListingModel;
 import ghidra.app.util.viewer.options.OptionsGui;
+import ghidra.app.util.viewer.proxy.DataProxy;
 import ghidra.app.util.viewer.proxy.ProxyObj;
 import ghidra.framework.options.Options;
 import ghidra.framework.options.ToolOptions;
@@ -44,7 +45,7 @@ public class PlateFieldFactory extends FieldFactory {
 	private static final String EMPTY_STRING = "";
 	public static final String FIELD_NAME = "Plate Comment";
 	public static final Color DEFAULT_COLOR = Color.BLUE;
-	private final static String FIELD_GROUP_TITLE = "Plate Comment";
+	private final static String FIELD_GROUP_TITLE = "Plate Comments Field";
 	public final static String ENABLE_WORD_WRAP_MSG =
 		FIELD_GROUP_TITLE + Options.DELIMITER + "Enable Word Wrapping";
 
@@ -107,7 +108,7 @@ public class PlateFieldFactory extends FieldFactory {
 	/**
 	 * Constructor
 	 * @param model the model that the field belongs to.
-	 * @param hsProvider the HightLightStringProvider.
+	 * @param hlProvider the HightLightStringProvider.
 	 * @param displayOptions the Options for display properties.
 	 * @param fieldOptions the Options for field specific properties.
 	 */
@@ -126,10 +127,10 @@ public class PlateFieldFactory extends FieldFactory {
 		nLinesBeforeLabels = fieldOptions.getInt(LINES_BEFORE_LABELS_OPTION, 1);
 		nLinesBeforePlates = fieldOptions.getInt(LINES_BEFORE_PLATES_OPTION, 0);
 
-		showExternalFunctionPointerPlates = fieldOptions.getBoolean(
-			ListingModel.DISPLAY_EXTERNAL_FUNCTION_POINTER_OPTION_NAME, true);
-		showNonExternalFunctionPointerPlates = fieldOptions.getBoolean(
-			ListingModel.DISPLAY_NONEXTERNAL_FUNCTION_POINTER_OPTION_NAME, false);
+		showExternalFunctionPointerPlates = fieldOptions
+				.getBoolean(ListingModel.DISPLAY_EXTERNAL_FUNCTION_POINTER_OPTION_NAME, true);
+		showNonExternalFunctionPointerPlates = fieldOptions
+				.getBoolean(ListingModel.DISPLAY_NONEXTERNAL_FUNCTION_POINTER_OPTION_NAME, false);
 
 	}
 
@@ -160,9 +161,30 @@ public class PlateFieldFactory extends FieldFactory {
 		FieldElement[] fields = new FieldElement[elementList.size()];
 		elementList.toArray(fields);
 
+		if (isNestedDataAtSameAddressAsParent(proxy)) {
+			// This is data at the same address as the parent, which happens with the first
+			// element in a structure.  We do not want to the plate comment here, but only at the
+			// parent topmost address.
+			return null;
+		}
+
 		PlateFieldTextField textField =
 			new PlateFieldTextField(fields, this, proxy, startX, width, commentText, isClipped);
 		return new PlateListingTextField(proxy, textField);
+	}
+
+	private boolean isNestedDataAtSameAddressAsParent(ProxyObj<?> proxy) {
+		if (proxy instanceof DataProxy) {
+			DataProxy dp = (DataProxy) proxy;
+			Data data = dp.getObject();
+			int[] cpath = data.getComponentPath();
+			if (cpath.length > 0) {
+				if (cpath[cpath.length - 1] == 0) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	private String getCommentText(CodeUnit cu) {
@@ -199,8 +221,8 @@ public class PlateFieldFactory extends FieldFactory {
 		AttributedString prototype = new AttributedString(EMPTY_STRING, color, getMetrics());
 
 		for (int i = 0; i < comments.length; i++) {
-			elementList.add(
-				CommentUtils.parseTextForAnnotations(comments[i], program, prototype, i));
+			elementList
+					.add(CommentUtils.parseTextForAnnotations(comments[i], program, prototype, i));
 		}
 
 		if (isWordWrap) {
@@ -249,7 +271,7 @@ public class PlateFieldFactory extends FieldFactory {
 	 * Generate a text line for the plate text.
 	 * Text will be left justified between two '*' and padded based upon the
 	 * available field width.
-	 * @param text plate text string
+	 * @param elements the field elements that may get updated
 	 * @return formatted plate text line
 	 */
 	private boolean addSideBorders(List<FieldElement> elements) {
@@ -499,13 +521,16 @@ public class PlateFieldFactory extends FieldFactory {
 		if (!CodeUnit.class.isAssignableFrom(proxyObjectClass)) {
 			return false;
 		}
-		return (category == FieldFormatModel.PLATE);
+
+		// some users like the look of plate comments and would like them in many places
+		return (category == FieldFormatModel.PLATE || category == FieldFormatModel.OPEN_DATA ||
+			category == FieldFormatModel.INSTRUCTION_OR_DATA);
 	}
 
 	@Override
 	public FieldFactory newInstance(FieldFormatModel formatModel, HighlightProvider hsProvider,
-			ToolOptions displayOptions, ToolOptions fieldOptions) {
-		return new PlateFieldFactory(formatModel, hsProvider, displayOptions, fieldOptions);
+			ToolOptions toolOptions, ToolOptions fieldOptions) {
+		return new PlateFieldFactory(formatModel, hsProvider, toolOptions, fieldOptions);
 	}
 
 	@Override
@@ -654,11 +679,11 @@ public class PlateFieldFactory extends FieldFactory {
 			"Number of lines to displayed before a plate comment." +
 				" This setting has precedence over Lines Before Labels.");
 
+		help = new HelpLocation(HelpTopics.CODE_BROWSER, "Function_Pointers");
 		options.registerOption(ListingModel.DISPLAY_EXTERNAL_FUNCTION_POINTER_OPTION_NAME, true,
-			help, null);
+			help, "Shows/hides function header format for pointers to external functions");
 		options.registerOption(ListingModel.DISPLAY_NONEXTERNAL_FUNCTION_POINTER_OPTION_NAME, false,
-			help, null);
-
+			help, "Shows/hides function header format for pointers to non-external functions");
 	}
 
 //==================================================================================================

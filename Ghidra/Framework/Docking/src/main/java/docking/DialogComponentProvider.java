@@ -26,24 +26,24 @@ import org.apache.commons.lang3.StringUtils;
 import org.jdesktop.animation.timing.Animator;
 import org.jdesktop.animation.timing.TimingTargetAdapter;
 
-import docking.action.ActionContextProvider;
-import docking.action.DockingActionIf;
+import docking.action.*;
+import docking.actions.KeyBindingUtils;
 import docking.event.mouse.GMouseListenerAdapter;
-import docking.menu.DockingToolbarButton;
-import docking.util.*;
+import docking.help.HelpService;
+import docking.menu.DialogToolbarButton;
+import docking.util.AnimationUtils;
 import docking.widgets.label.GDHtmlLabel;
-import ghidra.generic.function.Callback;
 import ghidra.util.*;
 import ghidra.util.exception.AssertException;
 import ghidra.util.task.*;
+import utility.function.Callback;
 
 /**
  * Base class used for creating dialogs in Ghidra. Subclass this to create a dialog provider that has
  * all the gui elements to appear in the dialog, then use tool.showDialog() to display your dialog.
  */
-
 public class DialogComponentProvider
-		implements TaskListener, StatusListener, ActionContextProvider {
+		implements ActionContextProvider, StatusListener, TaskListener {
 
 	private static final Color WARNING_COLOR = new Color(0xff9900);
 
@@ -52,11 +52,14 @@ public class DialogComponentProvider
 	private static final String PROGRESS = "Progress";
 	private static final String DEFAULT = "No Progress";
 
-	protected JPanel rootPanel;
+	private static int idCounter;
+
+	private int id = ++idCounter;
 
 	private boolean modal;
 	private String title;
 
+	protected JPanel rootPanel;
 	private JPanel mainPanel;
 	private JComponent workPanel;
 	private JPanel buttonPanel;
@@ -72,7 +75,7 @@ public class DialogComponentProvider
 	private TaskScheduler taskScheduler;
 	private TaskMonitorComponent taskMonitorComponent;
 
-	private static KeyStroke escKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
+	private static final KeyStroke ESC_KEYSTROKE = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
 
 	private CardLayout progressCardLayout;
 	private JButton defaultButton;
@@ -81,7 +84,7 @@ public class DialogComponentProvider
 	private Component focusComponent;
 	private JPanel toolbar;
 
-	private final Map<DockingActionIf, DockingToolbarButton> actionMap = new HashMap<>();
+	private final Map<DockingActionIf, DialogToolbarButton> actionMap = new HashMap<>();
 	private final DialogComponentProviderPopupActionManager popupManager =
 		new DialogComponentProviderPopupActionManager(this);
 	private final PopupHandler popupHandler = new PopupHandler();
@@ -180,13 +183,17 @@ public class DialogComponentProvider
 			}
 		};
 
-		KeyBindingUtils.registerAction(rootPanel, escKeyStroke, escAction,
+		KeyBindingUtils.registerAction(rootPanel, ESC_KEYSTROKE, escAction,
 			JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
 	}
 
 	/** a callback mechanism for children to do work */
 	protected void doInitialize() {
 		// may be overridden by subclasses
+	}
+
+	public int getId() {
+		return id;
 	}
 
 	public JComponent getComponent() {
@@ -625,7 +632,7 @@ public class DialogComponentProvider
 	public void setStatusText(String message, MessageType type, boolean alert) {
 
 		String text = StringUtils.isBlank(message) ? " " : message;
-		SystemUtilities.runIfSwingOrPostSwingLater(() -> doSetStatusText(text, type, alert));
+		Swing.runIfSwingOrRunLater(() -> doSetStatusText(text, type, alert));
 	}
 
 	private void doSetStatusText(String text, MessageType type, boolean alert) {
@@ -635,18 +642,6 @@ public class DialogComponentProvider
 
 		statusLabel.setText(text);
 		statusLabel.setForeground(getStatusColor(type));
-		updateStatusToolTip();
-
-		if (alert) {
-			alertMessage();
-		}
-	}
-
-	private void doSetSubStatusText(String text, MessageType type, boolean alert) {
-
-		SystemUtilities.assertThisIsTheSwingThread(
-			"Setting text must be performed on the Swing thread");
-
 		updateStatusToolTip();
 
 		if (alert) {
@@ -669,7 +664,7 @@ public class DialogComponentProvider
 	 */
 	protected void alertMessage(Callback alertFinishedCallback) {
 
-		SystemUtilities.runIfSwingOrPostSwingLater(() -> {
+		Swing.runIfSwingOrRunLater(() -> {
 			doAlertMessage(alertFinishedCallback);
 		});
 	}
@@ -765,6 +760,13 @@ public class DialogComponentProvider
 	}
 
 	private void showProgressBar(String localTitle, boolean hasProgress, boolean canCancel) {
+
+		if (!isVisible()) {
+			// It doesn't make any sense to show the task monitor when the dialog is not 
+			// visible, so show the dialog
+			DockingWindowManager.showDialog(getParent(), this);
+		}
+
 		taskMonitorComponent.setTaskName(localTitle);
 		taskMonitorComponent.showProgress(hasProgress);
 		taskMonitorComponent.setCancelButtonVisibility(canCancel);
@@ -804,7 +806,7 @@ public class DialogComponentProvider
 	 */
 	@Override
 	public void clearStatusText() {
-		SystemUtilities.runIfSwingOrPostSwingLater(() -> {
+		Swing.runIfSwingOrRunLater(() -> {
 			statusLabel.setText(" ");
 			updateStatusToolTip();
 		});
@@ -995,8 +997,17 @@ public class DialogComponentProvider
 	}
 
 	/**
+	 * Returns the help location for this dialog
+	 * @return the help location
+	 */
+	public HelpLocation getHelpLocatdion() {
+		HelpService helpService = DockingWindowManager.getHelpService();
+		return helpService.getHelpLocation(rootPanel);
+	}
+
+	/**
 	 * Sets the button to make "Default" when the dialog is shown.  If no default button is
-	 * desired, then pass <tt>null</tt> as the <tt>button</tt> value.
+	 * desired, then pass <code>null</code> as the <code>button</code> value.
 	 * @param button the button to make default enabled.
 	 */
 	public void setDefaultButton(JButton button) {
@@ -1065,6 +1076,13 @@ public class DialogComponentProvider
 		return dialog;
 	}
 
+	private Component getParent() {
+		if (dialog == null) {
+			return null;
+		}
+		return dialog.getParent();
+	}
+
 	public boolean isVisible() {
 		return ((dialog != null) && dialog.isVisible());
 	}
@@ -1124,7 +1142,23 @@ public class DialogComponentProvider
 	 */
 	@Override
 	public ActionContext getActionContext(MouseEvent event) {
-		return new ActionContext(null, null);
+
+		Component c = getComponent();
+		KeyboardFocusManager kfm = KeyboardFocusManager.getCurrentKeyboardFocusManager();
+		Component focusedComponent = kfm.getFocusOwner();
+		if (focusedComponent != null && SwingUtilities.isDescendingFrom(focusedComponent, c)) {
+			c = focusedComponent;
+		}
+
+		if (event == null) {
+			return new ActionContext(null, c);
+		}
+
+		Component sourceComponent = event.getComponent();
+		if (sourceComponent != null) {
+			c = sourceComponent;
+		}
+		return new ActionContext(null, c).setSourceObject(event.getSource());
 	}
 
 	/**
@@ -1142,18 +1176,6 @@ public class DialogComponentProvider
 		}
 	}
 
-	/**
-	 * Add an action to this dialog.  Only actions with icons are added to the toolbar.
-	 * @param action popup menu action
-	 */
-	public void addAction(final DockingActionIf action) {
-		dialogActions.add(action);
-		addToolbarAction(action);
-		popupManager.addAction(action);
-
-		registerActionKeyBinding(action);
-	}
-
 	public Set<DockingActionIf> getActions() {
 		return new HashSet<>(dialogActions);
 	}
@@ -1169,41 +1191,37 @@ public class DialogComponentProvider
 			mainPanel.add(toolbar, BorderLayout.NORTH);
 		}
 
-		DockingToolbarButton button = new DockingToolbarButton(action, this);
+		DialogToolbarButton button = new DialogToolbarButton(action, this);
 		toolbar.add(button);
 		actionMap.put(action, button);
 	}
 
-	private void registerActionKeyBinding(DockingActionIf dockingAction) {
-		String name = dockingAction.getName();
-		KeyStroke stroke = dockingAction.getKeyBinding();
-		if (stroke == null) {
+	/**
+	 * Add an action to this dialog.  Only actions with icons are added to the toolbar.
+	 * Note, if you add an action to this dialog, do not also add the action to 
+	 * the tool, as this dialog will do that for you.
+	 * @param action the action
+	 */
+	public void addAction(final DockingActionIf action) {
+		dialogActions.add(action);
+		addToolbarAction(action);
+		popupManager.addAction(action);
+		addKeyBindingAction(action);
+	}
+
+	private void addKeyBindingAction(DockingActionIf action) {
+
+		// add the action to the tool in order get key event management (key bindings 
+		// options and key event processing)
+		DockingWindowManager dwm = DockingWindowManager.getActiveInstance();
+		if (dwm == null) {
+			// This implies the client dialog has been shown outside of the plugin framework. In
+			// that case, the client will not get key event processing for dialog actions.
 			return;
 		}
-		ActionAdapter actionAdapter = new ActionAdapter(dockingAction, this);
-		Object binding = null; // old binding for keyStroke;
 
-		InputMap imap = rootPanel.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
-		if (imap != null) {
-			binding = imap.get(stroke);
-			imap.put(stroke, name);
-		}
-
-		ActionMap amap = rootPanel.getActionMap();
-		if (amap != null) {
-			if (binding != null) {
-				Action action = amap.get(binding);
-				if (action != null) {
-					if (action instanceof DockingActionIf) {
-						throw new AssertException(
-							"Attempted to register more than one acton with the same keybinding to this dialog! " +
-								stroke);
-					}
-					actionAdapter.setDefaultAction(action);
-				}
-			}
-			amap.put(name, actionAdapter);
-		}
+		Tool tool = dwm.getTool();
+		tool.addAction(new DialogActionProxy(action));
 	}
 
 	public void removeAction(DockingActionIf action) {
@@ -1318,52 +1336,23 @@ public class DialogComponentProvider
 
 	}
 
-//==================================================================================================
-// Testing...
-//==================================================================================================
+	/**
+	 * A placeholder action that we register with the tool in order to get key event management
+	 */
+	private class DialogActionProxy extends DockingActionProxy {
 
-	public static void main(String[] args) throws Exception {
-		try {
-			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-		}
-		catch (Exception exc) {
-			Msg.error(DialogComponentProvider.class, "Error loading L&F: " + exc, exc);
-		}
-		JFrame frame = new JFrame("What");
-		Joe joe = new Joe("My Test Dialog Component", true);
-		frame.setVisible(true);
-		JDialog d = DockingDialog.createDialog(frame, joe, null);
-		d.setVisible(true);
-		Thread.sleep(2000);
-		d = DockingDialog.createDialog(frame, joe, null);
-		d.setVisible(true);
-		frame.setVisible(false);
-		System.exit(0);
-	}
-
-	static class Joe extends DialogComponentProvider {
-		Joe(String title, boolean modal) {
-			super(title, modal);
-			addOKButton();
-			addCancelButton();
-			addWorkPanel(new JButton("TEST"));
+		public DialogActionProxy(DockingActionIf dockingAction) {
+			super(dockingAction);
 		}
 
 		@Override
-		protected void okCallback() {
-			this.setStatusText("OK");
-//			Task t = new BusyTask();
-//			executeProgressTask(t, 500);
-			setOkEnabled(false);
+		public boolean isAddToPopup(ActionContext context) {
+			return false;
 		}
 
 		@Override
-		protected void cancelCallback() {
-			this.setStatusText("Cancel");
-			clearScheduledTask();
-			super.cancelCallback();
+		public ToolBarData getToolBarData() {
+			return null;
 		}
-
 	}
-
 }

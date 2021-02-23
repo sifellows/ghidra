@@ -48,10 +48,11 @@ public class ArrayDataType extends DataTypeImpl implements Array {
 	 * @param dataType the dataType of the elements in the array.
 	 * @param numElements the number of elements in the array.
 	 * @param elementLength the length of an individual element in the array.
+	 * @param dtm datatype manager or null
 	 */
 	public ArrayDataType(DataType dataType, int numElements, int elementLength,
 			DataTypeManager dtm) {
-		super(CategoryPath.ROOT, "array", dtm);
+		super(dataType.getCategoryPath(), "array", dtm);
 		validate(dataType);
 		if (dataType.getDataTypeManager() != dtm) {
 			dataType = dataType.clone(dtm);
@@ -72,6 +73,10 @@ public class ArrayDataType extends DataTypeImpl implements Array {
 	}
 
 	private void validate(DataType dt) {
+		if (dt instanceof BitFieldDataType) {
+			throw new IllegalArgumentException(
+				"Array data-type may not be a bitfield: " + dt.getName());
+		}
 		if (dt instanceof FactoryDataType) {
 			throw new IllegalArgumentException(
 				"Array data-type may not be a Factory data-type: " + dt.getName());
@@ -96,9 +101,6 @@ public class ArrayDataType extends DataTypeImpl implements Array {
 
 	@Override
 	public boolean isEquivalent(DataType obj) {
-		if (obj == null) {
-			return false;
-		}
 		if (obj == this) {
 			return true;
 		}
@@ -169,7 +171,7 @@ public class ArrayDataType extends DataTypeImpl implements Array {
 	}
 
 	@Override
-	public void setName(String name) throws InvalidNameException, DuplicateNameException {
+	public void setName(String name) throws InvalidNameException {
 		// unsupported - ignore
 	}
 

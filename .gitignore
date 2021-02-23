@@ -3,6 +3,7 @@ ghidra.repos.config
 
 # Misc files produced while executing application
 repositories/
+flatRepo/
 Ghidra/.ghidraSvrKeys
 wrapper.log*
 
@@ -52,7 +53,10 @@ Release
 *.aps
 *.vcproj.*
 *.vcxproj.*
+# dump files
+*.mdmp
 .vs/
+.editorconfig/
 
 # Ignore UNIX backup files
 *~
@@ -62,3 +66,22 @@ Release
 .project
 .classpath
 .settings/
+
+# Ignore XTEXT generated dirs/files
+*/*/*/*/xtend-gen
+*/*/*/*/src-gen
+*/*/*/*/model/generated
+*/*/*/*/test-bin
+
+# Ignore Intellij metadata
+**/*.iml
+**/.idea
+*.iml
+.idea
+
+# Ignore gradle wrapper files
+gradle/wrapper
+gradlew
+gradlew.*
+
+

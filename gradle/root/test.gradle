@@ -56,17 +56,17 @@ if (!project.hasProperty('srcTreeName')) {
 }
 
 project.ext.testRootDirName = "JunitTest_" + srcTreeName
-project.ext.cunitTestRootDirName = "CunitTest_" + srcTreeName
+project.ext.pcodeTestRootDirName = "PCodeTest_" + srcTreeName
 
 project.ext.shareDir = System.properties.get('share.dir')
 if (project.ext.shareDir != null) {
 	// add src tree name to machine specified share path
 	project.ext.testShareDir = shareDir + "/" + testRootDirName
-	project.ext.cunitTestShareDir = shareDir + "/" + cunitTestRootDirName
+	project.ext.pcodeTestShareDir = shareDir + "/" + pcodeTestRootDirName
 }
 else {
 	project.ext.testShareDir = "$rootTestDir" + "/JUnit"
-	project.ext.cunitTestShareDir = "$rootTestDir" + "/CUnit"
+	project.ext.pcodeTestShareDir = "$rootTestDir" + "/PCodeTest"
 }
 
 project.ext.upgradeProgramErrorMessage = "WARNING! Attempting data upgrade for "
@@ -89,13 +89,19 @@ project.ext.userHome = System.properties.get("user.home")
 // Enable this mode if 'parallelCombinedTestReport' invoked in the command line.
 project.ext.parallelMode = project.gradle.startParameter.taskNames.contains('parallelCombinedTestReport')
 
+project.ext.targetMode = project.gradle.startParameter.taskNames.contains('targetedTestReport')
+
+project.ext.targetFiles = targetMode ? project.getProperty('targetFiles') : null
+
+project.ext.targetProjects = targetMode ? getTestProjects(targetFiles) : null
+
 // 'parallelCombinedTestReport' task will parse a JUnit test report for test duration.
 // Specify the location of the report via cmd line using "-PtestTimeParserInputDir=<location>".
 // If the location is not specified via cmd line, it will look for the latest test report 
 // in <reportDir>/../reportsArchive/reports_<date>
 // If a reportsArchive path does not exist, it will assume all tests have the same duration and 
 // continue with test task creation. 
- project.ext.testTimeParserInputDir = project.hasProperty('testTimeParserInputDir') ?
+project.ext.testTimeParserInputDir = project.hasProperty('testTimeParserInputDir') ?
         project.getProperty('testTimeParserInputDir') + "/reports/classes" : getLastArchivedReport("$reportArchivesDir") + "/classes"
 
 // A port of 0 will allow the kernel to give a free port number in the set of "User"
@@ -132,6 +138,39 @@ def getLogFileUrl() {
 	throw new GradleException("Cannot find log4j properties file using path '$logFilePath'")
 }
 
+/**
+ * Given a set of files (passed in via the -PtargetFiles command line param), this
+ * will search the project tree for each files' package to see if there is a test
+ * class defined that can be run.
+ * 
+ * The param is a list of file paths created by 'git diff --names-only'
+ */
+def List<Project> getTestProjects(String files) {  
+      
+   List<Project> projects = new ArrayList<>();
+   
+   List paths = files.tokenize('%')
+   
+   for (String path : paths) {
+     File file = new File(path)   // might blow up?
+     
+     // Find the project for this file
+     def ps
+     while (file.parentFile != null) {
+        ps = rootProject.allprojects.findAll { it.projectDir == file }
+        if (ps) {
+           ps.each {
+             projects.add(it)
+           }
+           break;
+        }
+        file = file.parentFile
+     }
+   }
+   
+   return projects
+}
+
 /*********************************************************************************
  * Creates a new debug port randomly.
  *********************************************************************************/
@@ -153,7 +192,7 @@ def generateRandomDebugPort() {
 
 /*********************************************************************************
  * Loads application specific property file that contains info we need.
- * Properties will be imediately added to the global System.properties file so we
+ * Properties will be immediately added to the global System.properties file so we
  * can readily access them from just one place.
  *********************************************************************************/
 def loadApplicationProperties() {
@@ -286,12 +325,12 @@ def initTestJVM(Task task, String rootDirName) {
 			'-XX:ParallelGCThreads=8',
 			'-XX:+UseParallelGC',
 			'-Djava.awt.headless=false',
-			// Dont' run this long winded analysis when testing (see DecompilerFunctionAnalyzer)
-			'-DDecompilerFunctionAnalyzer.enabled=false',
-			'-Djava.util.Arrays.useLegacyMergeSort=true',
+			'-DDecompilerFunctionAnalyzer.enabled=false', // prevent long-winded analysis when testing (see DecompilerFunctionAnalyzer)
+			'-Dfile.encoding=UTF8',
+			'-Duser.country=US',
+			'-Duser.language=en',
 			'-Djdk.attach.allowAttachSelf',
-			'-javaagent:' + jmockitPath,
-			
+			'-javaagent:' + jmockitPath,			
 			'-DLock.DEBUG=true',
 			'-Xdebug',
 			'-Xnoagent',
@@ -327,10 +366,53 @@ task parallelCombinedTestReport(type: TestReport) { t ->
  *********************************************************************************/
 task unitTestReport(type: TestReport) { t ->
 	group "test"
-	destinationDir = file("$reportDir/unitTests")
+    description "Run unit tests and save HTML report."
+    destinationDir = file("$reportDir/unitTests")
 	outputs.upToDateWhen {false}
 }
 
+/*********************************************************************************
+ * INTEGRATION TEST REPORT
+ *
+ * Summary:	Runs all integration tests and generates a single report.
+ *
+ *********************************************************************************/
+task integrationTestReport(type: TestReport) { t ->
+	group "test"
+    description "Run integration tests and save HTML report."
+    destinationDir = file("$reportDir/integrationTests")
+	outputs.upToDateWhen {false}
+}
+
+/*********************************************************************************
+ * TARGETED TEST REPORT
+ *
+ * Summary:	Runs unit tests against a set of projects
+ *
+ * The projects to be run against are stored in the project.ext.targetProjects
+ * var, which is populated at the top of this file. This is currently only
+ * used by the runAllTests.sh script which executes this task on each commit, 
+ * so we can run all the tests for the files contained in that commit.
+ *
+ *********************************************************************************/
+task targetedTestReport(type: TestReport) { t -> 
+    group "test"
+    description "Run unit tests against a specific set of projects."
+    destinationDir = file("$reportDir/unitTests")
+    outputs.upToDateWhen {false}
+    dependsOn ":deleteTestTempAndReportDirs"
+
+	// This is a bit tricky but the tasks for each project are not yet defined
+	// at this point, so we have to put this in an afterEvaluate block before
+	// we can set up the reportOn dependency
+    project.ext.targetProjects.each {
+      it.afterEvaluate { p -> 
+        if (p.tasks.findByName('test')) {
+        	reportOn p.test
+        }
+      }
+    }
+}
 
 
 /*********************************************************************************
@@ -341,19 +423,20 @@ task unitTestReport(type: TestReport) { t ->
  *  
  *  @param subproject 
  *  @param testType - Either 'test' or 'integrationTest'. The sourceSets defined in setupJava.gradle
+ *  @param bucketName - the test category (appConfig, dockingConfig, integrationConfig, etc...)
  *  @param taskNameCounter - Number to append to task name.
  *  @param classesList - List of classes for this subproject.testType. Sorted by duration.
  *  @param classesListPosition - Start position in 'classesList'
  *  @param numMaxParallelForks - Number of concurrent tests to run.
  *********************************************************************************/
-def createTestTask(Project subproject, String testType, int taskNameCounter, ArrayList classesList,
+def createTestTask(Project subproject, String testType, String bucketName, int taskNameCounter, ArrayList classesList,
 	int classesListPosition, int numMaxParallelForks) {
 
-	subproject.task(testType+"_$taskNameCounter", type: Test) { t ->
+	subproject.task(testType+"_$taskNameCounter"+"_$bucketName", type: Test) { t ->
 		group "test"
 		testClassesDirs = files subproject.sourceSets["$testType"].output.classesDirs
 		classpath = subproject.sourceSets["$testType"].runtimeClasspath
-
+		
 		maxParallelForks = numMaxParallelForks
 
 		initTestJVM(t, testRootDirName)
@@ -379,10 +462,10 @@ def createTestTask(Project subproject, String testType, int taskNameCounter, Arr
 
 		// Current task mustRunAfter previous task (test_1 before test_2,etc.)
 		if (taskNameCounter > 1) {
-			def prevTaskName = "$testType" + "_" + (taskNameCounter -1)
+			def prevTaskName = "$testType" + "_" + (taskNameCounter -1) + "_$bucketName"
 			mustRunAfter prevTaskName
 		}
-		logger.info("createTestTask: Created $subproject.name" + ":$testType" + "_$taskNameCounter" 
+		logger.info("createTestTask: Created $subproject.name" + ":$testType" + "_$taskNameCounter" + "_$bucketName"
 			+ "\n\tincludes = \n" + t.getIncludes() + "\n\tinheriting excludes (overrides any 'includes') = \n"
 			+ t.excludes)
 	} // end task
@@ -397,44 +480,56 @@ def createTestTask(Project subproject, String testType, int taskNameCounter, Arr
  *********************************************************************************/
 configure(subprojects.findAll {parallelMode == true}) { subproject ->
 	afterEvaluate {
-		// "subprojects { afterEvaluate { evaluate()"
-		// forces evaluation of subproject configuration. Needed for inheriting excludes
-		// from non-parallel counterpart.
-//		subproject.evaluate() 
 
 		if (!shouldSkipTestTaskCreation(subproject)) {
 			logger.info("parallelCombinedTestReport: Creating 'test' tasks for " + subproject.name + " subproject.")
 
-			ArrayList classesList = getTestsForSubProject(subproject.sourceSets.test.java)
-			int classesListPosition = 0 // current position in classesList
-			int taskNameCounter = 1 // task suffix
-			int numMaxParallelForks = 40 // unit tests are fast; 40 seems to be a reasonable number
+			Map<String,List> testMap = getTestsForSubProject(subproject.sourceSets.test.java)
 
-			while (classesListPosition < classesList.size()) {
-				createTestTask(subproject, "test", taskNameCounter, classesList, classesListPosition, numMaxParallelForks)
-				classesListPosition+=numMaxParallelForks
-				taskNameCounter+=1; // "test_1", "test_2, etc.
+			for (Map.Entry<String,List> classMap : testMap.entrySet()) {
+			
+				String bucketName = classMap.getKey();
+				
+				int classesListPosition = 0 // current position in classesList
+				int taskNameCounter = 1 // task suffix
+				int numMaxParallelForks = 40 // unit tests are fast; 40 seems to be a reasonable number
+			
+				List<String> tests = classMap.getValue();
+				
+				while (classesListPosition < tests.size()) {
+					createTestTask(subproject, "test", bucketName, taskNameCounter, tests, classesListPosition, numMaxParallelForks)
+					classesListPosition+=numMaxParallelForks
+					taskNameCounter+=1; // "test_1_appConfig", "test_2_appConfig, etc.
+				}
 			}
 		}
-
+		
 		if (!shouldSkipIntegrationTestTaskCreation(subproject)) {
 			logger.info("parallelCombinedTestReport: Creating 'integrationTest' tasks for " + subproject.name + " subproject.")
 
-			ArrayList classesList = getTestsForSubProject(subproject.sourceSets.integrationTest.java)
-			int classesListPosition = 0 // current position in classesList
-			int taskNameCounter = 1 // task suffix
-
-			// Through trial-and-error we found that 40 is too many
-			// concurrent integration tests (ghidratest server has 40 CPUs).
-			// 20 seems like a good balance of throughput vs resource usage for ghidratest server.
-			int numMaxParallelForks = 20
-
-			while (classesListPosition < classesList.size()) {
-				createTestTask(subproject, "integrationTest", taskNameCounter, classesList, classesListPosition, numMaxParallelForks)
-				classesListPosition+=numMaxParallelForks
-				taskNameCounter+=1; // "integrationTest_1", "integrationTest_2, etc.
+			Map<String,List> testMap = getTestsForSubProject(subproject.sourceSets.integrationTest.java)
+			
+			for (Map.Entry<String,List> classMap : testMap.entrySet()) {
+			
+				String bucketName = classMap.getKey();
+			
+				int classesListPosition = 0 // current position in classesList
+				int taskNameCounter = 1 // task suffix
+				
+				// Through trial-and-error we found that 40 is too many
+				// concurrent integration tests (ghidratest server has 40 CPUs).
+				// 20 seems like a good balance of throughput vs resource usage for ghidratest server.
+				int numMaxParallelForks = 20 
+			
+				List<String> tests = classMap.getValue();
+								
+				while (classesListPosition < tests.size()) {
+					createTestTask(subproject, "integrationTest", bucketName, taskNameCounter, tests, classesListPosition, numMaxParallelForks)
+					classesListPosition+=numMaxParallelForks
+					taskNameCounter+=1; // "integrationTest_1_appConfig", "integrationTest_2_appConfig, etc.
+				}
 			}
-		}	
+		}
 	} // end afterEvaluate
 }// end subprojects
 
@@ -454,27 +549,27 @@ task combinedTestReport(type: TestReport) { t ->
 }
 
 /*********************************************************************************
- * CUNIT TEST REPORT
+ * P-CODE TEST REPORT
  *
- * Summary:	Runs all CUNIT tests
+ * Summary:	Runs all P-Code Tests
  *
  *********************************************************************************/
-task cunitTestReport(type: TestReport) { t ->
-	group "cunit"
-	destinationDir = file("$cunitTestShareDir" + "/reports")
+task pcodeTestReport(type: TestReport) { t ->
+	group "pcodeTest"
+	destinationDir = file("$pcodeTestShareDir" + "/reports")
 }	
 	
 /*********************************************************************************
- * CUNIT TEST REPORT w/ CUNIT MATRIX REPORT
+ * P-CODE TEST REPORT w/ MATRIX REPORT
  *
- * Summary:	Runs all CUNIT tests and consolidate JUnit and Matrix report in
+ * Summary:	Runs all P-Code Tests and consolidates JUnit and Matrix report in
  * results directory.
  *
  *********************************************************************************/
-task cunitConsolidatedTestReport(type: Copy) {
-	group "cunit"
-	dependsOn ':cunitTestReport'
-	into (cunitTestShareDir + "/reports")
+task pcodeConsolidatedTestReport(type: Copy) {
+	group "pcodeTest"
+	dependsOn ':pcodeTestReport'
+	into (pcodeTestShareDir + "/reports")
 	from (testOutputDir + "/test-output") {
 		exclude '**/*.xml', 'cache/**'
 	}

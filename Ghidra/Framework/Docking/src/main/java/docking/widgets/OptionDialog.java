@@ -28,64 +28,78 @@ import docking.widgets.checkbox.GCheckBox;
 import docking.widgets.dialogs.*;
 import docking.widgets.label.GHtmlLabel;
 import docking.widgets.label.GIconLabel;
-import ghidra.util.HTMLUtilities;
-import ghidra.util.Msg;
+import ghidra.util.*;
 import ghidra.util.exception.AssertException;
 
 /**
  * A utility class to easily show dialogs that require input from the user.
  *
  *
- * <h3>Option Dialogs</h3><br>
+ * <h2>Option Dialogs</h2><br>
+ * <blockquote>
  * <p>
  * The primary type of
  * dialog provided herein is the basic option dialog that allows the user to specify the buttons
  * that appear on the dialog.  By default, the given option text will appear as a button(s),
- * followed by a <tt>Cancel</tt> button (you can call the
+ * followed by a <code>Cancel</code> button (you can call the
  * {@link #showOptionNoCancelDialog(Component, String, String, String, String, int)} methods if
- * you do not want a <tt>Cancel</tt> button.  To use this type of dialog you can use the
- * various <b><tt>showOptionDialog*</tt></b> methods.
+ * you do not want a <code>Cancel</code> button.  To use this type of dialog you can use the
+ * various <b><code>showOptionDialog*</code></b> methods.
  * </p>
  * <p>
  * Each of the option dialog methods will return a result, which is a number indicating the
  * choice made by the user.  See each method for more details.
  * </p>
+ * </blockquote>
  *
  *
  * <h3>Data Input and Choice Dialogs</h3><br>
- * <p>
- * The methods listed here allow the user to either enter data from the keyboard or to choose
- * from a pre-populated list of data.
- * </p>
  * <blockquote>
- * {@link #showInputChoiceDialog(Component, String, String, String[], String, int)}<br>
- * {@link #showInputMultilineDialog(Component, String, String, String)}<br>
- * {@link #showInputSingleLineDialog(Component, String, String, String)}
+ * 		<p>
+ * 		The methods listed here allow the user to either enter data from the keyboard or to choose
+ * 		from a pre-populated list of data.
+ * 		</p>
+ * 		<blockquote>
+ * 		{@link #showInputChoiceDialog(Component, String, String, String[], String, int)}<br>
+ * 		{@link #showInputMultilineDialog(Component, String, String, String)}<br>
+ * 		{@link #showInputSingleLineDialog(Component, String, String, String)}
+ * 	</blockquote>
  * </blockquote>
  *
  *
  * <h3>Yes/No Dialogs</h3><br>
+ * <blockquote>
  * <p>
- * Finally, there are a series of methods that present <tt>Yes</tt> and <tt>No</tt> buttons in
- * a dialog.  There are versions that do and do not have a <tt>Cancel</tt> button.
+ * Finally, there are a series of methods that present <code>Yes</code> and <code>No</code> buttons in
+ * a dialog.  There are versions that do and do not have a <code>Cancel</code> button.
  * </p>
+ * </blockquote>
  *
  *
  * <h3>Basic Message / Warning / Error Dialogs</h3><br>
+ * <blockquote>
  * <p>
  * If you would like to display a simple message to the user, but do not require input from the
  * user, then you should use the various methods of {@link Msg}, such as
  * {@link Msg#showInfo(Object, Component, String, Object)}.
  * </p>
- *
  * <p>
  * Note, the user will be unable to select any text shown in the message area of the dialog.
  * </p>
+ * </blockquote>
+ * 
+ * <h3>"Apply to All" / "Don't Show Again"</h3><br>
+ * <blockquote>
+ * <p>For more advanced input dialog usage, to include allowing the user to tell the dialog
+ * to remember a particular decision, or to apply a given choice to all future request, see
+ * {@link OptionDialogBuilder}.
+ * </blockquote>
  *
  * @see Msg
+ * @see OptionDialogBuilder
  */
 public class OptionDialog extends DialogComponentProvider {
-	private static final String MESSAGE_COMPONENT_NAME = "MESSAGE-COMPONENT";
+	public static final String MESSAGE_COMPONENT_NAME = "MESSAGE-COMPONENT";
 	/** Used for error messages. */
 	public static final int ERROR_MESSAGE = 0;
 	/** Used for information messages. */
@@ -141,7 +155,7 @@ public class OptionDialog extends DialogComponentProvider {
 	 * @param icon allows the user to specify the icon to be used.
 	 *              If non-null, this will override the messageType.
 	 */
-	public OptionDialog(String title, String message, int messageType, Icon icon) {
+	protected OptionDialog(String title, String message, int messageType, Icon icon) {
 		this(title, message, null, null, messageType, icon, false, null);
 	}
 
@@ -157,9 +171,10 @@ public class OptionDialog extends DialogComponentProvider {
 	 *     this will override the messageType.
 	 * @param addCancel true means add a Cancel button
 	 */
-	public OptionDialog(String title, String message, String option1, String option2,
+	protected OptionDialog(String title, String message, String option1, String option2,
 			int messageType, Icon icon, boolean addCancel) {
 		super(title, true, false, true, false);
+		setTransient(true);
 		buildMainPanel(message, messageType, icon, null);
 		buildButtons(toList(option1, option2), addCancel, null);
 	}
@@ -175,14 +190,12 @@ public class OptionDialog extends DialogComponentProvider {
 	 * @param icon allows the user to specify the icon to be used.  If non-null,
 	 *     this will override the messageType.
 	 * @param addCancel true means add a Cancel button
-	 * @param int The index of the button that should be the default button (the one that is
-	 *        executed when the user presses the Enter key):<br>
-	 *        1 for button 1; 2 for button 2 and 3 for button 3 (if applicable)
-	
+	 * @param defaultButtonName The default button name	
 	 */
-	public OptionDialog(String title, String message, String option1, String option2,
+	protected OptionDialog(String title, String message, String option1, String option2,
 			int messageType, Icon icon, boolean addCancel, String defaultButtonName) {
 		super(title, true, false, true, false);
+		setTransient(true);
 		buildMainPanel(message, messageType, icon, null);
 		buildButtons(toList(option1, option2), addCancel, defaultButtonName);
 	}
@@ -197,7 +210,8 @@ public class OptionDialog extends DialogComponentProvider {
 	 * @param icon allows the user to specify the icon to be used.  If non-null,
 	 *     this will override the messageType.
 	 */
-	public OptionDialog(String title, String message, String option1, int messageType, Icon icon) {
+	protected OptionDialog(String title, String message, String option1, int messageType,
+			Icon icon) {
 		this(title, message, option1, null, messageType, icon, true, null);
 	}
 
@@ -212,17 +226,16 @@ public class OptionDialog extends DialogComponentProvider {
 	 *     this will override the messageType.
 	 * @param defaultButtonName the name of the button to be made the default.
 	 */
-	public OptionDialog(String title, String message, String option1, int messageType, Icon icon,
+	protected OptionDialog(String title, String message, String option1, int messageType, Icon icon,
 			String defaultButtonName) {
 		this(title, message, option1, null, messageType, icon, true, defaultButtonName);
 	}
 
-	////////////////////////////////////////////////////////////////////////////
-
-	/** Special 3 button constructor */
+	/* Special 3 button constructor */
 	protected OptionDialog(String title, String message, String option1, String option2,
 			String option3, int messageType, Icon icon, boolean addCancel) {
 		super(title, true, false, true, false);
+		setTransient(true);
 		buildMainPanel(message, messageType, icon, null);
 		buildButtons(toList(option1, option2, option3), addCancel, null);
 	}
@@ -230,6 +243,7 @@ public class OptionDialog extends DialogComponentProvider {
 	OptionDialog(String title, String message, int messageType, Icon icon, boolean addCancelButton,
 			DialogRememberOption savedDialogChoice, List<String> options, String defaultOption) {
 		super(title, true, false, true, false);
+		setTransient(true);
 		buildMainPanel(message, messageType, icon, savedDialogChoice);
 		buildButtons(options, addCancelButton, defaultOption);
 	}
@@ -246,6 +260,7 @@ public class OptionDialog extends DialogComponentProvider {
 
 	private void buildMainPanel(String message, int messageType, Icon icon,
 			DialogRememberOption rememberOptionChoice) {
+
 		JPanel panel = new JPanel(new BorderLayout());
 		panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
@@ -286,8 +301,6 @@ public class OptionDialog extends DialogComponentProvider {
 		panel.add(textPanel, BorderLayout.CENTER);
 		return panel;
 	}
-
-	////////////////////////////////////////////////////////////////////////////
 
 	private void buildButtons(List<String> options, boolean addCancel, String defaultButtonName) {
 		List<JButton> buttons = new ArrayList<>();
@@ -340,7 +353,7 @@ public class OptionDialog extends DialogComponentProvider {
 			"No button exists to make default for name: " + defaultButtonName);
 	}
 
-	JButton createOptionButton(String optionName, final int callbackValue) {
+	private JButton createOptionButton(String optionName, final int callbackValue) {
 		int ampLoc = optionName.indexOf('&');
 		char mnemonicKey = '\0';
 		if (ampLoc >= 0 && ampLoc < optionName.length() - 1) {
@@ -375,6 +388,10 @@ public class OptionDialog extends DialogComponentProvider {
 		return label;
 	}
 
+	/**
+	 * Returns the dialog's message to the user
+	 * @return the message
+	 */
 	public String getMessage() {
 		return dialogMessage;
 	}
@@ -395,6 +412,13 @@ public class OptionDialog extends DialogComponentProvider {
 //==================================================================================================
 // Show Option Dialog Methods
 //==================================================================================================
+
+	/**
+	 * A convenience method to create a {@link OptionDialogBuilder}
+	 * @param title the dialog title
+	 * @param message the dialog message
+	 * @return the builder
+	 */
 	public static OptionDialogBuilder createBuilder(String title, String message) {
 		return new OptionDialogBuilder(title, message);
 	}
@@ -439,9 +463,12 @@ public class OptionDialog extends DialogComponentProvider {
 	 */
 	public static int showOptionDialogWithCancelAsDefaultButton(Component parent, String title,
 			String message, String option1) {
-		OptionDialog info =
-			new OptionDialog(title, message, option1, QUESTION_MESSAGE, null, "Cancel");
-		return info.show(parent);
+
+		return Swing.runNow(() -> {
+			OptionDialog info =
+				new OptionDialog(title, message, option1, QUESTION_MESSAGE, null, "Cancel");
+			return info.show(parent);
+		});
 	}
 
 	/**
@@ -466,10 +493,14 @@ public class OptionDialog extends DialogComponentProvider {
 	 */
 	public static int showOptionDialogWithCancelAsDefaultButton(Component parent, String title,
 			String message, String option1, int messageType) {
+
 		String defaultButton = option1.equals("Yes") ? "No" : "Cancel";
-		OptionDialog info =
-			new OptionDialog(title, message, option1, messageType, null, defaultButton);
-		return info.show(parent);
+
+		return Swing.runNow(() -> {
+			OptionDialog info =
+				new OptionDialog(title, message, option1, messageType, null, defaultButton);
+			return info.show(parent);
+		});
 	}
 
 	/**
@@ -491,8 +522,11 @@ public class OptionDialog extends DialogComponentProvider {
 	 */
 	public static int showOptionDialog(Component parent, String title, String message,
 			String option1, int messageType) {
-		OptionDialog info = new OptionDialog(title, message, option1, messageType, null);
-		return info.show(parent);
+
+		return Swing.runNow(() -> {
+			OptionDialog info = new OptionDialog(title, message, option1, messageType, null);
+			return info.show(parent);
+		});
 	}
 
 	/**
@@ -516,9 +550,12 @@ public class OptionDialog extends DialogComponentProvider {
 	 */
 	public static int showOptionDialog(Component parent, String title, String message,
 			String option1, int messageType, String defaultButtonName) {
-		OptionDialog info =
-			new OptionDialog(title, message, option1, messageType, null, defaultButtonName);
-		return info.show(parent);
+
+		return Swing.runNow(() -> {
+			OptionDialog info =
+				new OptionDialog(title, message, option1, messageType, null, defaultButtonName);
+			return info.show(parent);
+		});
 	}
 
 	/**
@@ -540,8 +577,11 @@ public class OptionDialog extends DialogComponentProvider {
 	 */
 	public static int showOptionDialog(Component parent, String title, String message,
 			String option1, Icon icon) {
-		OptionDialog info = new OptionDialog(title, message, option1, PLAIN_MESSAGE, icon);
-		return info.show(parent);
+
+		return Swing.runNow(() -> {
+			OptionDialog info = new OptionDialog(title, message, option1, PLAIN_MESSAGE, icon);
+			return info.show(parent);
+		});
 	}
 
 	/**
@@ -563,9 +603,12 @@ public class OptionDialog extends DialogComponentProvider {
 	 */
 	public static int showOptionDialog(Component parent, String title, String message,
 			String option1, String option2, String option3, int messageType) {
-		OptionDialog dialog =
-			new OptionDialog(title, message, option1, option2, option3, messageType, null, true);
-		return dialog.show(parent);
+
+		return Swing.runNow(() -> {
+			OptionDialog dialog = new OptionDialog(title, message, option1, option2, option3,
+				messageType, null, true);
+			return dialog.show(parent);
+		});
 	}
 
 	/**
@@ -609,9 +652,12 @@ public class OptionDialog extends DialogComponentProvider {
 	 */
 	public static int showOptionDialog(Component parent, String title, String message,
 			String option1, String option2, int messageType) {
-		OptionDialog info =
-			new OptionDialog(title, message, option1, option2, messageType, null, true);
-		return info.show(parent);
+
+		return Swing.runNow(() -> {
+			OptionDialog info =
+				new OptionDialog(title, message, option1, option2, messageType, null, true);
+			return info.show(parent);
+		});
 	}
 
 	/**
@@ -634,9 +680,12 @@ public class OptionDialog extends DialogComponentProvider {
 	 */
 	public static int showOptionDialog(Component parent, String title, String message,
 			String option1, String option2, Icon icon) {
-		OptionDialog info =
-			new OptionDialog(title, message, option1, option2, PLAIN_MESSAGE, icon, true);
-		return info.show(parent);
+
+		return Swing.runNow(() -> {
+			OptionDialog info =
+				new OptionDialog(title, message, option1, option2, PLAIN_MESSAGE, icon, true);
+			return info.show(parent);
+		});
 	}
 
 	/**
@@ -659,9 +708,12 @@ public class OptionDialog extends DialogComponentProvider {
 	 */
 	public static int showOptionNoCancelDialog(Component parent, String title, String message,
 			String option1, String option2, int messageType) {
-		OptionDialog info =
-			new OptionDialog(title, message, option1, option2, messageType, null, false);
-		return info.show(parent);
+
+		return Swing.runNow(() -> {
+			OptionDialog info =
+				new OptionDialog(title, message, option1, option2, messageType, null, false);
+			return info.show(parent);
+		});
 	}
 
 	/**
@@ -685,9 +737,11 @@ public class OptionDialog extends DialogComponentProvider {
 	public static int showOptionNoCancelDialog(Component parent, String title, String message,
 			String option1, String option2, Icon icon) {
 
-		OptionDialog info =
-			new OptionDialog(title, message, option1, option2, PLAIN_MESSAGE, icon, false);
-		return info.show();
+		return Swing.runNow(() -> {
+			OptionDialog info =
+				new OptionDialog(title, message, option1, option2, PLAIN_MESSAGE, icon, false);
+			return info.show();
+		});
 	}
 
 	/**
@@ -713,9 +767,11 @@ public class OptionDialog extends DialogComponentProvider {
 	public static int showOptionNoCancelDialog(Component parent, String title, String message,
 			String option1, String option2, String option3, int messageType) {
 
-		OptionDialog info =
-			new OptionDialog(title, message, option1, option2, option3, messageType, null, false);
-		return info.show();
+		return Swing.runNow(() -> {
+			OptionDialog info = new OptionDialog(title, message, option1, option2, option3,
+				messageType, null, false);
+			return info.show();
+		});
 	}
 
 	/**
@@ -725,9 +781,11 @@ public class OptionDialog extends DialogComponentProvider {
 	 * @param title     The String to be placed in the dialogs title area.
 	 * @param message   The information message to be displayed in the dialog.
 	 * @return The options selected by the user:
+	 * <pre>
 	 *                  0 is returned if the operation is cancelled
 	 *                  1 for <b>Yes</b>
 	 *                  2 for <b>No</b>
+	 * </pre>
 	 */
 	public static int showYesNoDialog(Component parent, String title, String message) {
 		return showOptionNoCancelDialog(parent, title, message, "&Yes", "&No", QUESTION_MESSAGE);
@@ -736,8 +794,8 @@ public class OptionDialog extends DialogComponentProvider {
 	/**
 	 * Dialog with only YES/NO options, <b>no CANCEL</b>
 	 * <p>
-	 * The dialog shown by this method will have the <tt>No</tt> button set as the default button so
-	 * that an Enter key press will trigger a <tt>No</tt> action.
+	 * The dialog shown by this method will have the <code>No</code> button set as the default button so
+	 * that an Enter key press will trigger a <code>No</code> action.
 	 *
 	 * @param parent    The parent component of this dialog. If the given component is
 	 * a frame or dialog, then the component will be used to parent the option dialog.
@@ -747,14 +805,19 @@ public class OptionDialog extends DialogComponentProvider {
 	 * @param title The String to be placed in the dialogs title area.
 	 * @param message The information message to be displayed in the dialog.
 	 * @return The options selected by the user:
+	 * <pre>
 	 *                  1 for <b>Yes</b>
 	 *                  2 for <b>No</b>
+	 * </pre>
 	 */
 	public static int showYesNoDialogWithNoAsDefaultButton(Component parent, String title,
 			String message) {
-		OptionDialog info =
-			new OptionDialog(title, message, "&Yes", "&No", QUESTION_MESSAGE, null, false, "No");
-		return info.show(parent);
+
+		return Swing.runNow(() -> {
+			OptionDialog info = new OptionDialog(title, message, "&Yes", "&No", QUESTION_MESSAGE,
+				null, false, "No");
+			return info.show(parent);
+		});
 	}
 
 	/**
@@ -768,9 +831,11 @@ public class OptionDialog extends DialogComponentProvider {
 	 * @param title     The String to be placed in the dialogs title area.
 	 * @param message   The information message to be displayed in the dialog.
 	 * @return The options selected by the user:
+	 * <pre>
 	 *                  0 is returned if the operation is cancelled
 	 *                  1 for the first option
 	 *                  2 for the second option
+	 * </pre>
 	 */
 	public static int showYesNoCancelDialog(Component parent, String title, String message) {
 		return showOptionDialog(parent, title, message, "&Yes", "&No", QUESTION_MESSAGE);
@@ -787,18 +852,22 @@ public class OptionDialog extends DialogComponentProvider {
 	 */
 	public static String showInputSingleLineDialog(Component parent, String title, String label,
 			String initialValue) {
-		InputDialog dialog = new InputDialog(title, label, initialValue, true);
 
-		// Apply similar settings to that of the OptionDialog, for consistency
-		dialog.setRememberLocation(false);
-		dialog.setRememberSize(false);
+		return Swing.runNow(() -> {
 
-		DockingWindowManager.showDialog(parent, dialog);
+			InputDialog dialog = new InputDialog(title, label, initialValue, true);
 
-		if (dialog.isCanceled()) {
-			return null;
-		}
-		return dialog.getValue();
+			// Apply similar settings to that of the OptionDialog, for consistency
+			dialog.setRememberLocation(false);
+			dialog.setRememberSize(false);
+
+			DockingWindowManager.showDialog(parent, dialog);
+
+			if (dialog.isCanceled()) {
+				return null;
+			}
+			return dialog.getValue();
+		});
 	}
 
 	/**
@@ -812,14 +881,19 @@ public class OptionDialog extends DialogComponentProvider {
 	 */
 	public static String showInputMultilineDialog(Component parent, String title, String label,
 			String initialValue) {
-		Icon icon = getIconForMessageType(QUESTION_MESSAGE);
-		MultiLineInputDialog dialog = new MultiLineInputDialog(title, label, initialValue, icon);
-		DockingWindowManager.showDialog(parent, dialog);
 
-		if (dialog.isCanceled()) {
-			return null;
-		}
-		return dialog.getValue();
+		return Swing.runNow(() -> {
+
+			Icon icon = getIconForMessageType(QUESTION_MESSAGE);
+			MultiLineInputDialog dialog =
+				new MultiLineInputDialog(title, label, initialValue, icon);
+			DockingWindowManager.showDialog(parent, dialog);
+
+			if (dialog.isCanceled()) {
+				return null;
+			}
+			return dialog.getValue();
+		});
 	}
 
 	/**
@@ -839,16 +913,19 @@ public class OptionDialog extends DialogComponentProvider {
 	public static String showInputChoiceDialog(Component parent, String title, String label,
 			String[] selectableValues, String initialValue, int messageType) {
 
-		Icon icon = getIconForMessageType(messageType);
+		return Swing.runNow(() -> {
 
-		InputWithChoicesDialog dialog =
-			new InputWithChoicesDialog(title, label, selectableValues, initialValue, icon);
-		DockingWindowManager.showDialog(parent, dialog);
+			Icon icon = getIconForMessageType(messageType);
 
-		if (dialog.isCanceled()) {
-			return null;
-		}
-		return dialog.getValue();
+			InputWithChoicesDialog dialog =
+				new InputWithChoicesDialog(title, label, selectableValues, initialValue, icon);
+			DockingWindowManager.showDialog(parent, dialog);
+
+			if (dialog.isCanceled()) {
+				return null;
+			}
+			return dialog.getValue();
+		});
 	}
 
 	/**
@@ -871,14 +948,17 @@ public class OptionDialog extends DialogComponentProvider {
 
 		Icon icon = getIconForMessageType(messageType);
 
-		InputWithChoicesDialog dialog =
-			new InputWithChoicesDialog(title, label, selectableValues, initialValue, true, icon);
-		DockingWindowManager.showDialog(parent, dialog);
+		return Swing.runNow(() -> {
+			InputWithChoicesDialog dialog = new InputWithChoicesDialog(title, label,
+				selectableValues, initialValue, true, icon);
+			DockingWindowManager.showDialog(parent, dialog);
 
-		if (dialog.isCanceled()) {
-			return null;
-		}
-		return dialog.getValue();
+			if (dialog.isCanceled()) {
+				return null;
+			}
+			return dialog.getValue();
+
+		});
 	}
 
 	/**

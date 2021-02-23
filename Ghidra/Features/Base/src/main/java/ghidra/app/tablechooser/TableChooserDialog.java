@@ -24,8 +24,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import javax.swing.*;
 import javax.swing.table.TableCellRenderer;
 
-import docking.*;
-import docking.action.*;
+import docking.ActionContext;
+import docking.DialogComponentProvider;
+import docking.action.DockingAction;
 import docking.widgets.table.*;
 import docking.widgets.table.threaded.ThreadedTableModel;
 import ghidra.app.nav.Navigatable;
@@ -33,7 +34,6 @@ import ghidra.app.nav.NavigatableRemovalListener;
 import ghidra.app.services.GoToService;
 import ghidra.app.util.HelpTopics;
 import ghidra.framework.plugintool.PluginTool;
-import ghidra.generic.function.Callback;
 import ghidra.program.model.listing.Program;
 import ghidra.program.util.ProgramLocation;
 import ghidra.program.util.ProgramSelection;
@@ -42,8 +42,9 @@ import ghidra.util.SystemUtilities;
 import ghidra.util.datastruct.WeakDataStructureFactory;
 import ghidra.util.datastruct.WeakSet;
 import ghidra.util.table.*;
+import ghidra.util.table.actions.MakeProgramSelectionAction;
 import ghidra.util.task.TaskMonitor;
-import resources.ResourceManager;
+import utility.function.Callback;
 
 /**
  * Dialog to show a table of items.  If the dialog is constructed with a non-null 
@@ -111,8 +112,9 @@ public class TableChooserDialog extends DialogComponentProvider
 			navigatable.addNavigatableListener(this);
 			table.installNavigation(goToService, navigatable);
 		}
-		table.getSelectionModel().addListSelectionListener(
-			e -> setOkEnabled(table.getSelectedRowCount() > 0));
+		table.getSelectionModel()
+				.addListSelectionListener(
+					e -> setOkEnabled(table.getSelectedRowCount() > 0));
 
 		GhidraTableFilterPanel<AddressableRowObject> filterPanel =
 			new GhidraTableFilterPanel<>(table, model);
@@ -157,23 +159,20 @@ public class TableChooserDialog extends DialogComponentProvider
 
 	private void createActions() {
 		String owner = getClass().getSimpleName();
-		DockingAction selectAction = new DockingAction("Make Selection", owner, false) {
-			@Override
-			public void actionPerformed(ActionContext context) {
-				makeSelection();
-			}
 
+		DockingAction selectAction = new MakeProgramSelectionAction(owner, table) {
 			@Override
-			public boolean isEnabledForContext(ActionContext context) {
-				return table.getSelectedRowCount() != 0;
+			protected ProgramSelection makeSelection(ActionContext context) {
+				ProgramSelection selection = table.getProgramSelection();
+				if (navigatable != null) {
+					navigatable.goTo(program,
+						new ProgramLocation(program, selection.getMinAddress()));
+					navigatable.setSelection(selection);
+					navigatable.requestFocus();
+				}
+				return selection;
 			}
 		};
-		selectAction.setDescription("Make a selection using selected rows");
-		selectAction.setEnabled(true);
-		Icon icon = ResourceManager.loadImage("images/text_align_justify.png");
-		selectAction.setToolBarData(new ToolBarData(icon));
-		selectAction.setPopupMenuData(new MenuData(new String[] { "Make Selection" }, icon));
-		selectAction.setHelpLocation(new HelpLocation(HelpTopics.SEARCH, "Make_Selection"));
 
 		DockingAction selectionNavigationAction = new SelectionNavigationAction(owner, table);
 		selectionNavigationAction.setHelpLocation(
@@ -183,21 +182,8 @@ public class TableChooserDialog extends DialogComponentProvider
 		addAction(selectionNavigationAction);
 	}
 
-	private void makeSelection() {
-		ProgramSelection selection = table.getProgramSelection();
-		if (program == null || program.isClosed() || selection.getNumAddresses() == 0) {
-			return;
-		}
-		if (navigatable != null) {
-			navigatable.goTo(program, new ProgramLocation(program, selection.getMinAddress()));
-			navigatable.setSelection(selection);
-			navigatable.requestFocus();
-		}
-	}
-
 	public void show() {
-		DockingWindowManager manager = DockingWindowManager.getActiveInstance();
-		tool.showDialog(this, manager.getMainWindow());
+		tool.showDialog(this);
 	}
 
 	@Override
@@ -206,6 +192,7 @@ public class TableChooserDialog extends DialogComponentProvider
 		if (navigatable != null) {
 			navigatable.removeNavigatableListener(this);
 		}
+		dispose();
 	}
 
 	@Override
@@ -255,7 +242,8 @@ public class TableChooserDialog extends DialogComponentProvider
 		monitor.initialize(rowObjects.size());
 
 		try {
-			List<AddressableRowObject> deleted = doProcessRowObjects(rowObjects, monitor);
+			List<AddressableRowObject> deleted = doProcessRowsInTransaction(rowObjects, monitor);
+
 			for (AddressableRowObject rowObject : deleted) {
 				model.removeObject(rowObject);
 			}
@@ -268,8 +256,9 @@ public class TableChooserDialog extends DialogComponentProvider
 		}
 	}
 
-	private List<AddressableRowObject> doProcessRowObjects(List<AddressableRowObject> rowObjects,
+	private List<AddressableRowObject> doProcessRows(List<AddressableRowObject> rowObjects,
 			TaskMonitor monitor) {
+
 		List<AddressableRowObject> deleted = new ArrayList<>();
 		for (AddressableRowObject rowObject : rowObjects) {
 			if (monitor.isCancelled()) {
@@ -292,6 +281,18 @@ public class TableChooserDialog extends DialogComponentProvider
 		}
 
 		return deleted;
+	}
+
+	private List<AddressableRowObject> doProcessRowsInTransaction(
+			List<AddressableRowObject> rowObjects, TaskMonitor monitor) {
+
+		int tx = program.startTransaction("Table Chooser: " + getTitle());
+		try {
+			return doProcessRows(rowObjects, monitor);
+		}
+		finally {
+			program.endTransaction(tx, true);
+		}
 	}
 
 	public void addCustomColumn(ColumnDisplay<?> columnDisplay) {
@@ -332,6 +333,11 @@ public class TableChooserDialog extends DialogComponentProvider
 		int[] selectedRows = table.getSelectedRows();
 		List<AddressableRowObject> rowObjects = model.getRowObjects(selectedRows);
 		return rowObjects;
+	}
+
+	public void dispose() {
+		table.dispose();
+		workers.forEach(w -> w.cancel(true));
 	}
 
 //==================================================================================================

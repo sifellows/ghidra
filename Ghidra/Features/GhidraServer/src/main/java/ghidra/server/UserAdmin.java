@@ -25,6 +25,7 @@ import org.apache.logging.log4j.Logger;
 
 import ghidra.framework.store.local.LocalFileSystem;
 import ghidra.util.exception.DuplicateNameException;
+import utilities.util.FileUtilities;
 
 /**
  * <code>UserAdmin</code> is an Application for generating administrative 
@@ -40,6 +41,8 @@ public class UserAdmin {
 	static final String RESET_USER_COMMAND = "-reset";
 	static final String SET_USER_DN_COMMAND = "-dn";
 	static final String SET_ADMIN_COMMAND = "-admin";
+
+	static final String PASSWORD_OPTION = "--p"; // applies to add and reset commands
 
 	static final String ADMIN_CMD_DIR = LocalFileSystem.HIDDEN_DIR_PREFIX + "admin";
 	static final String COMMAND_FILE_EXT = ".cmd";
@@ -115,8 +118,12 @@ public class UserAdmin {
 		String[] args = splitCommand(cmd);
 		if (ADD_USER_COMMAND.equals(args[0])) {  // add user
 			String sid = args[1];
+			char[] pwdHash = null;
+			if (args.length == 4 && args[2].contentEquals(PASSWORD_OPTION)) {
+				pwdHash = args[3].toCharArray();
+			}
 			try {
-				userMgr.addUser(sid);
+				userMgr.addUser(sid, pwdHash);
 				log.info("User '" + sid + "' added");
 			}
 			catch (DuplicateNameException e) {
@@ -130,8 +137,15 @@ public class UserAdmin {
 		}
 		else if (RESET_USER_COMMAND.equals(args[0])) { // reset user
 			String sid = args[1];
-			if (!userMgr.resetPassword(sid)) {
+			char[] pwdHash = null;
+			if (args.length == 4 && args[2].contentEquals(PASSWORD_OPTION)) {
+				pwdHash = args[3].toCharArray();
+			}
+			if (!userMgr.resetPassword(sid, pwdHash)) {
 				log.info("Failed to reset password for user '" + sid + "'");
+			}
+			else if (pwdHash != null) {
+				log.info("User '" + sid + "' password reset to specified password");
 			}
 			else {
 				log.info("User '" + sid + "' password reset to default password");
@@ -205,33 +219,15 @@ public class UserAdmin {
 		log.info("Processing " + files.length + " queued commands");
 
 		for (File file : files) {
-			ArrayList<String> cmdList = readCommands(file);
-			Iterator<String> it = cmdList.iterator();
-			while (it.hasNext()) {
-				processCommand(repositoryMgr, it.next());
+			List<String> cmdList = FileUtilities.getLines(file);
+			for (String cmdStr : cmdList) {
+				if (cmdStr.isBlank()) {
+					continue;
+				}
+				processCommand(repositoryMgr, cmdStr.trim());
 			}
 			file.delete();
 		}
-	}
-
-	/**
-	 * Read all command strings contained within a file.
-	 * @param cmdFile command file
-	 * @return list of command strings
-	 * @throws IOException
-	 */
-	private static ArrayList<String> readCommands(File cmdFile) throws IOException {
-		ArrayList<String> cmdList = new ArrayList<>();
-		BufferedReader rdr = new BufferedReader(new FileReader(cmdFile));
-		String cmd;
-		while ((cmd = rdr.readLine()) != null) {
-			if (cmd.length() == 0) {
-				continue;
-			}
-			cmdList.add(cmd.trim());
-		}
-		rdr.close();
-		return cmdList;
 	}
 
 	/**

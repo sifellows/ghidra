@@ -156,6 +156,7 @@ public class BatchImportDialog extends DialogComponentProvider {
 		TableColumn langColumn =
 			table.getColumnModel().getColumn(BatchImportTableModel.COLS.LANG.ordinal());
 		langColumn.setCellEditor(createLangColumnCellEditor());
+		langColumn.setCellRenderer(createLangColumnCellRenderer());
 
 		JScrollPane scrollPane = new JScrollPane(table);
 
@@ -230,10 +231,15 @@ public class BatchImportDialog extends DialogComponentProvider {
 		});
 
 		removeSourceButton.addActionListener(e -> {
-			int index = sourceList.getSelectedIndex();
-			if (index >= 0 && index < batchInfo.getUserAddedSources().size()) {
-				UserAddedSourceInfo uasi = batchInfo.getUserAddedSources().get(index);
-				batchInfo.remove(uasi.getFSRL());
+			List<FSRL> sourcesToRemove = new ArrayList<>();
+			for (int index : sourceList.getSelectedIndices()) {
+				if (index >= 0 && index < batchInfo.getUserAddedSources().size()) {
+					UserAddedSourceInfo uasi = batchInfo.getUserAddedSources().get(index);
+					sourcesToRemove.add(uasi.getFSRL());
+				}
+			}
+			for (FSRL fsrl : sourcesToRemove) {
+				batchInfo.remove(fsrl);
 			}
 			refreshData();
 		});
@@ -343,9 +349,8 @@ public class BatchImportDialog extends DialogComponentProvider {
 
 		ListSelectionTableDialog<String> dialog =
 			new ListSelectionTableDialog<>("Application Files", names);
-		dialog.setMultiSelectionMode(true);
 		dialog.hideOkButton();
-		dialog.show(table);
+		dialog.showSelectMultiple(table);
 	}
 
 	private void setOpenAfterImporting(boolean b) {
@@ -478,7 +483,6 @@ public class BatchImportDialog extends DialogComponentProvider {
 
 	private TableCellRenderer createFilesColumnCellRenderer() {
 		TableCellRenderer cellRenderer = new GTableCellRenderer() {
-
 			@Override
 			public Component getTableCellRendererComponent(GTableCellRenderingData data) {
 
@@ -522,6 +526,30 @@ public class BatchImportDialog extends DialogComponentProvider {
 		};
 
 		return cellEditor;
+	}
+
+	private TableCellRenderer createLangColumnCellRenderer() {
+		TableCellRenderer cellRenderer = new GTableCellRenderer() {
+			{
+				setHTMLRenderingEnabled(true);
+			}
+
+			@Override
+			public Component getTableCellRendererComponent(GTableCellRenderingData data) {
+				JLabel renderer = (JLabel) super.getTableCellRendererComponent(data);
+				renderer.setToolTipText("Click to set language");
+				return renderer;
+			}
+
+			@Override
+			protected String getText(Object value) {
+				BatchGroupLoadSpec bgls = (BatchGroupLoadSpec) value;
+				return (bgls != null) ? bgls.toString()
+						: "<html><font size=\"-2\" color=\"gray\">Click to set language</font>";
+			}
+		};
+
+		return cellRenderer;
 	}
 
 	private class SourcesListModel extends AbstractListModel<String> {

@@ -26,6 +26,7 @@ import com.google.common.base.Function;
 
 import docking.DockingUtils;
 import docking.DockingWindowManager;
+import docking.actions.KeyBindingUtils;
 import docking.help.HelpService;
 import docking.widgets.EmptyBorderButton;
 import docking.widgets.PopupWindow;
@@ -453,7 +454,7 @@ public class GraphComponent<V extends VisualVertex, E extends VisualEdge<V>, G e
 		mainStalePanel.setOpaque(false);
 
 		String tooltip = HTMLUtilities.toWrappedHTML("The block model of the function " +
-			"for this graph has changed.  Press the relyout button to refresh the layout." +
+			"for this graph has changed.  Press the relayout button to refresh the layout." +
 			"\n\n") + "<b>Note: </b>You can edit the graph " +
 			"options to have the graph update automatically.";
 
@@ -1028,15 +1029,8 @@ public class GraphComponent<V extends VisualVertex, E extends VisualEdge<V>, G e
 				return;
 			}
 
-			KeyboardFocusManager kfm = KeyboardFocusManager.getCurrentKeyboardFocusManager();
-			KeyEvent clonedKeyEvent = cloneKeyEvent(e, focusedVertex.getComponent());
-			kfm.redispatchEvent(focusedVertex.getComponent(), clonedKeyEvent);
-
+			KeyBindingUtils.retargetEvent(focusedVertex.getComponent(), e);
 			viewer.repaint();
-
-			if (clonedKeyEvent.isConsumed()) {
-				e.consume();
-			}
 		}
 
 		@Override
@@ -1046,15 +1040,8 @@ public class GraphComponent<V extends VisualVertex, E extends VisualEdge<V>, G e
 				return;
 			}
 
-			KeyboardFocusManager kfm = KeyboardFocusManager.getCurrentKeyboardFocusManager();
-			KeyEvent clonedKeyEvent = cloneKeyEvent(e, focusedVertex.getComponent());
-			kfm.redispatchEvent(focusedVertex.getComponent(), clonedKeyEvent);
-
+			KeyBindingUtils.retargetEvent(focusedVertex.getComponent(), e);
 			viewer.repaint();
-
-			if (clonedKeyEvent.isConsumed()) {
-				e.consume();
-			}
 		}
 
 		@Override
@@ -1064,21 +1051,8 @@ public class GraphComponent<V extends VisualVertex, E extends VisualEdge<V>, G e
 				return;
 			}
 
-			KeyboardFocusManager kfm = KeyboardFocusManager.getCurrentKeyboardFocusManager();
-			KeyEvent clonedKeyEvent = cloneKeyEvent(e, focusedVertex.getComponent());
-			kfm.redispatchEvent(focusedVertex.getComponent(), clonedKeyEvent);
-
+			KeyBindingUtils.retargetEvent(focusedVertex.getComponent(), e);
 			viewer.repaint();
-
-			if (clonedKeyEvent.isConsumed()) {
-				e.consume();
-			}
-		}
-
-		private KeyEvent cloneKeyEvent(KeyEvent keyEvent, Component newSource) {
-			return new KeyEvent(newSource, keyEvent.getID(), keyEvent.getWhen(),
-				keyEvent.getModifiersEx(), keyEvent.getKeyCode(), keyEvent.getKeyChar(),
-				keyEvent.getKeyLocation());
 		}
 	}
 
@@ -1154,9 +1128,13 @@ public class GraphComponent<V extends VisualVertex, E extends VisualEdge<V>, G e
 
 		private V selectedVertex;
 
-		@SuppressWarnings("deprecation") // deprecated until we fix the checkModifiers() code
 		public VertexClickMousePlugin() {
-			super(InputEvent.BUTTON1_MASK);
+			super(InputEvent.BUTTON1_DOWN_MASK);
+		}
+
+		@Override
+		public boolean checkModifiers(MouseEvent e) {
+			return e.getModifiersEx() == modifiers;
 		}
 
 		@Override
@@ -1229,6 +1207,5 @@ public class GraphComponent<V extends VisualVertex, E extends VisualEdge<V>, G e
 		public void mouseExited(MouseEvent e) {
 			// stub
 		}
-
 	}
 }

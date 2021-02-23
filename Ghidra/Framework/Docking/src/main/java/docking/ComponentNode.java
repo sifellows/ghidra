@@ -27,17 +27,20 @@ import org.jdom.Element;
 import docking.help.HelpService;
 import docking.widgets.OptionDialog;
 import docking.widgets.tabbedpane.DockingTabRenderer;
-import ghidra.util.HelpLocation;
-import ghidra.util.SystemUtilities;
+import ghidra.util.*;
+import ghidra.util.exception.AssertException;
+import utilities.util.reflection.ReflectionUtilities;
 
 /**
  * Node object for managing one or more components. If more that one managed component
  * is active, then this node will create a tabbedPane object to contain the active components.
  */
 class ComponentNode extends Node {
+
 	private ComponentPlaceholder top;
 	private List<ComponentPlaceholder> windowPlaceholders;
 	private JComponent comp;
+	private boolean isDisposed;
 
 	// keep track of top ComponentWindowingPlaceholder
 	private ChangeListener tabbedPaneChangeListener = e -> {
@@ -48,7 +51,7 @@ class ComponentNode extends Node {
 				break;
 			}
 		}
-		SystemUtilities.runSwingLater(() -> {
+		Swing.runLater(() -> {
 			if (top != null) {
 				top.requestFocus();
 			}
@@ -69,6 +72,7 @@ class ComponentNode extends Node {
 	 * @param elem the xml element describing the configuration of this node.
 	 * @param mgr the docking windows manager
 	 * @param parent the parent node for this node.
+	 * @param restoredPlaceholders the list into which any restored placeholders will be placed
 	 */
 	ComponentNode(Element elem, DockingWindowManager mgr, Node parent,
 			List<ComponentPlaceholder> restoredPlaceholders) {
@@ -88,15 +92,6 @@ class ComponentNode extends Node {
 			String group = e.getAttributeValue("GROUP");
 			if (group == null || group.trim().isEmpty()) {
 				group = ComponentProvider.DEFAULT_WINDOW_GROUP;
-			}
-
-			// SCR #4120 - Ignore old, buggy child nodes that had too long titles.  This
-			// will cleanup slow loading XML project files.
-			if (name.length() > 100) {
-				name = name.substring(0, 100);
-			}
-			if (title.length() > 100) {
-				title = title.substring(0, 100);
 			}
 
 			boolean isActive = Boolean.valueOf(e.getAttributeValue("ACTIVE")).booleanValue();
@@ -192,14 +187,20 @@ class ComponentNode extends Node {
 		if (getTopLevelNode() == null) {
 			return;   // this node has been disconnected.
 		}
+
 		if (placeholder.isShowing()) {
 			if (top == placeholder) {
 				top = null;
 			}
 			invalidate();
 		}
+
 		WindowNode topLevelNode = getTopLevelNode();
 		topLevelNode.componentRemoved(placeholder);
+		doRemove(placeholder);
+	}
+
+	private void doRemove(ComponentPlaceholder placeholder) {
 		windowPlaceholders.remove(placeholder);
 		placeholder.setNode(null);
 		if (windowPlaceholders.isEmpty()) {
@@ -222,19 +223,13 @@ class ComponentNode extends Node {
 			invalidate();
 			winMgr.scheduleUpdate();
 		}
+
 		placeholder.setProvider(null);
 		if (!keepEmptyPlaceholder) {
-			windowPlaceholders.remove(placeholder);
-			placeholder.setNode(null);
-			if (windowPlaceholders.isEmpty()) {
-				parent.removeNode(this);
-			}
+			doRemove(placeholder);
 		}
 	}
 
-	/**
-	 * Returns the number of ComponentWindowingPlaceholder objects being managed by this node.
-	 */
 	int getComponentCount() {
 		return windowPlaceholders.size();
 	}
@@ -253,6 +248,12 @@ class ComponentNode extends Node {
 
 	@Override
 	JComponent getComponent() {
+
+		if (isDisposed) {
+			throw new AssertException(
+				"Attempted to reuse a disposed component window node");
+		}
+
 		if (!invalid) {
 			return comp;
 		}
@@ -267,6 +268,18 @@ class ComponentNode extends Node {
 		populateActiveComponents(activeComponents);
 		int count = activeComponents.size();
 		if (count == 1) {
+
+			//
+			// TODO Hack Alert!  (When this is removed, also update ComponentPlaceholder)
+			// 
+			ComponentPlaceholder nextTop = activeComponents.get(0);
+			if (nextTop.isDisposed()) {
+				// This should not happen!  We have seen this bug recently
+				Msg.debug(this, "Found disposed component that was not removed from the active " +
+					"list: " + nextTop, ReflectionUtilities.createJavaFilteredThrowable());
+				return null;
+			}
+
 			top = activeComponents.get(0);
 			comp = top.getComponent();
 			comp.setBorder(BorderFactory.createRaisedBevelBorder());
@@ -326,7 +339,7 @@ class ComponentNode extends Node {
 			DockingTabRenderer tabRenderer) {
 
 		final ComponentProvider provider = placeholder.getProvider();
-		if (!provider.isTransient()) {
+		if (!provider.isTransient() || provider.isSnapshot()) {
 			return; // don't muck with the title of 'real' providers--only transients, like search
 		}
 
@@ -538,9 +551,11 @@ class ComponentNode extends Node {
 
 	@Override
 	void dispose() {
+		isDisposed = true;
 		if (top != null) {
 			top.dispose();
 		}
+		windowPlaceholders.clear();
 	}
 
 //==================================================================================================

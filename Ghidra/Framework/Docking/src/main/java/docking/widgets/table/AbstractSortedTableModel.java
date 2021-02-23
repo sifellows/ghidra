@@ -20,7 +20,9 @@ import java.util.*;
 import javax.swing.event.TableModelEvent;
 import javax.swing.table.TableModel;
 
-import ghidra.util.SystemUtilities;
+import docking.widgets.table.sort.DefaultColumnComparator;
+import docking.widgets.table.sort.RowBasedColumnComparator;
+import ghidra.util.Swing;
 import ghidra.util.datastruct.WeakDataStructureFactory;
 import ghidra.util.datastruct.WeakSet;
 
@@ -90,8 +92,8 @@ public abstract class AbstractSortedTableModel<T> extends AbstractGTableModel<T>
 	}
 
 	/**
-	 * Returns the index of the given row object in this model; -1 if the model does not contain
-	 * the given object.  
+	 * Returns the index of the given row object in this model; a negative value if the model 
+	 * does not contain the given object.  
 	 * 
 	 * <p>Warning: if the this model has no sort applied, then performance will be O(n).  If 
 	 * sorted, then performance is O(log n).  You can call {@link #isSorted()} to know when 
@@ -130,6 +132,9 @@ public abstract class AbstractSortedTableModel<T> extends AbstractGTableModel<T>
 
 	@Override
 	public int getPrimarySortColumnIndex() {
+		if (sortState.isUnsorted()) {
+			return -1;
+		}
 		return sortState.iterator().next().getColumnModelIndex();
 	}
 
@@ -152,6 +157,7 @@ public abstract class AbstractSortedTableModel<T> extends AbstractGTableModel<T>
 			return false; // more columns than we have
 		}
 
+		// verify the requested columns are sortable
 		for (int i = 0; i < columnCount; i++) {
 			ColumnSortState state = tableSortState.getColumnSortState(i);
 			if (state == null) {
@@ -166,6 +172,34 @@ public abstract class AbstractSortedTableModel<T> extends AbstractGTableModel<T>
 		return true;
 	}
 
+	/**
+	 * A convenience method that will take a given sort state and remove from it any columns
+	 * that cannot be sorted.  This is useful if the client is restoring a sort state that 
+	 * contains columns that have been removed or are no longer sortable (such as during major 
+	 * table model rewrites).
+	 * 
+	 * @param state the state
+	 * @return the updated state
+	 */
+	protected TableSortState cleanupTableSortState(TableSortState state) {
+
+		int columnCount = getColumnCount();
+		TableSortStateEditor editor = new TableSortStateEditor(state);
+		int n = editor.getSortedColumnCount();
+		for (int i = 0; i < n; i++) {
+			ColumnSortState ss = editor.getColumnSortState(i);
+			int columnIndex = ss.getColumnModelIndex();
+			if (columnIndex >= columnCount) {
+				editor.removeSortedColumn(columnIndex);
+			}
+			if (!isSortable(columnIndex)) {
+				editor.removeSortedColumn(columnIndex);
+			}
+		}
+
+		return editor.createTableSortState();
+	}
+
 	private void doSetTableSortState(final TableSortState newSortState) {
 		if (newSortState.equals(pendingSortState)) {
 			return; // there is an upcoming sort that matches the current request
@@ -178,18 +212,30 @@ public abstract class AbstractSortedTableModel<T> extends AbstractGTableModel<T>
 
 		isSortPending = true;
 		pendingSortState = newSortState;
-		SystemUtilities.runSwingLater(
-			() -> sort(getModelData(), createSortingContext(newSortState)));
+		Swing.runLater(() -> sort(getModelData(), createSortingContext(newSortState)));
 	}
 
 	public TableSortState getPendingSortState() {
 		return pendingSortState;
 	}
 
+	/**
+	 * Returns true if there is a pending change to the current sort state 
+	 * (this includes a sort state that signals no sort will be applied)
+	 * 
+	 * @return true if there is a pending change to the current sort state
+	 */
 	public boolean isSortPending() {
 		return isSortPending;
 	}
 
+	/**
+	 * Returns true if this model has been sorted and does not have a new pending sort that will
+	 * be applied
+	 * 
+	 * @return true if sorted
+	 * @see #isSortPending()
+	 */
 	public boolean isSorted() {
 		return !isSortPending && !sortState.isUnsorted();
 	}
@@ -223,7 +269,7 @@ public abstract class AbstractSortedTableModel<T> extends AbstractGTableModel<T>
 		hasEverSorted = true;
 		isSortPending = true;
 		pendingSortState = sortState;
-		SystemUtilities.runSwingLater(() -> sort(getModelData(), createSortingContext(sortState)));
+		Swing.runLater(() -> sort(getModelData(), createSortingContext(sortState)));
 	}
 
 	/**
@@ -266,7 +312,7 @@ public abstract class AbstractSortedTableModel<T> extends AbstractGTableModel<T>
 	/**
 	 * A default sort method that uses the {@link Collections#sort(List, Comparator)} method for
 	 * sorting.  Implementors with reasonably sized data sets can rely on this method.  For data
-	 * sets that can become large, the <tt>ThreadedTableModel</tt> is the recommended base class, 
+	 * sets that can become large, the <code>ThreadedTableModel</code> is the recommended base class, 
 	 * as it handles loading/sorting/filtering in a threaded way.
 	 * 
 	 * @param data The data to be sorted
@@ -299,7 +345,7 @@ public abstract class AbstractSortedTableModel<T> extends AbstractGTableModel<T>
 
 	/**
 	 * Fires an event to let the listeners (like JTable) know that things have been changed. 
-	 * This method exists so that subclasses have a way to call the various <tt>tableChanged()</tt>
+	 * This method exists so that subclasses have a way to call the various <code>tableChanged()</code>
 	 * methods without triggering this class's overridden version.
 	 * @param dataChanged True signals that the actual data has changed; false signals that the
 	 *        data is the same, with exception that attributes of that data may be different.
@@ -320,14 +366,14 @@ public abstract class AbstractSortedTableModel<T> extends AbstractGTableModel<T>
 
 	/**
 	 * An extension point for subclasses to insert their own comparator objects for their data.
-	 * Subclasses can create comparators for a single or multiple columns, as desired.  The 
-	 * {@link DefaultColumnComparator} is used as a, well, default comparator.
+	 * Subclasses can create comparators for a single or multiple columns, as desired.  
 	 * 
-	 * @param columnIndex the column index for which a comparator is desired.
-	 * @return a comparator for the given index.
+	 * @param columnIndex the column index
+	 * @return the comparator 
 	 */
 	protected Comparator<T> createSortComparator(int columnIndex) {
-		return new DefaultColumnComparator(columnIndex);
+		return new RowBasedColumnComparator<>(this, columnIndex, new DefaultColumnComparator(),
+			new StringBasedBackupRowToColumnComparator());
 	}
 
 	private Comparator<T> createLastResortComparator(ComparatorLink parentChain) {
@@ -416,23 +462,6 @@ public abstract class AbstractSortedTableModel<T> extends AbstractGTableModel<T>
 			}
 		}
 
-		int size() {
-			int count = 0;
-			if (primaryComparator != null) {
-				count++;
-			}
-
-			if (nextComparator == null) {
-				return count;
-			}
-
-			if (nextComparator instanceof AbstractSortedTableModel.ComparatorLink) {
-				count += ((ComparatorLink) nextComparator).size();
-			}
-
-			return count + 1; // +1 for the non-null comparator
-		}
-
 		@Override
 		public int compare(T t1, T t2) {
 			int result = primaryComparator.compare(t1, t2);
@@ -451,18 +480,21 @@ public abstract class AbstractSortedTableModel<T> extends AbstractGTableModel<T>
 	 * when we get to this comparator, then we have to make a decision about reasonable default
 	 * comparisons in order to maintain sorting consistency across sorts.
 	 */
-	@SuppressWarnings("unchecked")
-	// Comparable cast 
+	@SuppressWarnings("unchecked")	// Comparable cast 
 	private class EndOfChainComparator implements Comparator<T> {
 		@SuppressWarnings("rawtypes")
 		@Override
 		public int compare(T t1, T t2) {
 
-			// at this point we compare the rows, since all of the sorting columns are 
-			// completely equal
-			if (t1 instanceof Comparable) {
+			// at this point we compare the rows, since all of the sorting column values are equal
+			// (Warning: due to comparable being specific to the class upon which it is defined, 
+			//           we have to make sure the class is the same to prevent class cast 
+			//           exceptions when the table has mixed implementations of 'T')
+			if (t1 instanceof Comparable && t1.getClass().equals(t2.getClass())) {
 				return ((Comparable) t1).compareTo(t2);
 			}
+
+			// use the identity hash to provide a consistent unique identifier within a JVM session
 			return System.identityHashCode(t1) - System.identityHashCode(t2);
 		}
 	}
@@ -480,19 +512,28 @@ public abstract class AbstractSortedTableModel<T> extends AbstractGTableModel<T>
 		}
 	}
 
-	private class DefaultColumnComparator implements Comparator<T> {
-		private final int columnIndex;
-
-		public DefaultColumnComparator(int columnIndex) {
-			this.columnIndex = columnIndex;
-		}
+	private class StringBasedBackupRowToColumnComparator implements Comparator<Object> {
 
 		@Override
-		public int compare(T t1, T t2) {
-			Object value1 = getColumnValueForRow(t1, columnIndex);
-			Object value2 = getColumnValueForRow(t2, columnIndex);
-			return DEFAULT_COMPARATOR.compare(value1, value2);
+		public int compare(Object c1, Object c2) {
+			if (c1 == c2) {
+				return 0;
+			}
+
+			String s1 = getColumStringValue(c1);
+			String s2 = getColumStringValue(c2);
+
+			if (s1 == null || s2 == null) {
+				return TableComparators.compareWithNullValues(s1, s2);
+			}
+
+			return s1.compareToIgnoreCase(s2);
+		}
+
+		private String getColumStringValue(Object columnValue) {
+			// just use the toString(), which may or may not produce a good value (this will
+			// catch the cases where the column value is itself a string)
+			return columnValue == null ? null : columnValue.toString();
 		}
 	}
-
 }

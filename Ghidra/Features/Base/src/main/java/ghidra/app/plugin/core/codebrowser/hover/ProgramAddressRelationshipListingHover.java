@@ -15,8 +15,7 @@
  */
 package ghidra.app.plugin.core.codebrowser.hover;
 
-import static ghidra.util.HTMLUtilities.bold;
-import static ghidra.util.HTMLUtilities.italic;
+import static ghidra.util.HTMLUtilities.*;
 
 import javax.swing.JComponent;
 
@@ -24,8 +23,8 @@ import docking.widgets.fieldpanel.field.Field;
 import docking.widgets.fieldpanel.support.FieldLocation;
 import ghidra.GhidraOptions;
 import ghidra.app.plugin.core.hover.AbstractConfigurableHover;
-import ghidra.framework.options.Options;
 import ghidra.framework.plugintool.PluginTool;
+import ghidra.program.database.mem.AddressSourceInfo;
 import ghidra.program.model.address.*;
 import ghidra.program.model.data.Structure;
 import ghidra.program.model.listing.*;
@@ -33,6 +32,7 @@ import ghidra.program.model.mem.MemoryBlock;
 import ghidra.program.util.AddressFieldLocation;
 import ghidra.program.util.ProgramLocation;
 import ghidra.util.HTMLUtilities;
+import ghidra.util.StringUtilities;
 
 /**
  * A hover service to show tool tip text for hovering over a program address in the listing.
@@ -44,6 +44,7 @@ import ghidra.util.HTMLUtilities;
 public class ProgramAddressRelationshipListingHover extends AbstractConfigurableHover
 		implements ListingHoverService {
 
+	private static final int MAX_FILENAME_SIZE = 40;
 	private static final String NAME = "Address Display";
 	private static final String DESCRIPTION =
 		"Shows the relationship between the hovered address and the base of memory " +
@@ -57,18 +58,18 @@ public class ProgramAddressRelationshipListingHover extends AbstractConfigurable
 	}
 
 	@Override
-	public void initializeOptions() {
-		options = tool.getOptions(GhidraOptions.CATEGORY_BROWSER_POPUPS);
-		options.registerOption(NAME, true, null, DESCRIPTION);
-		setOptions(options, NAME);
-		options.addOptionsChangeListener(this);
+	protected String getName() {
+		return NAME;
 	}
 
 	@Override
-	public void setOptions(Options options, String optionName) {
-		if (optionName.equals(NAME)) {
-			enabled = options.getBoolean(NAME, true);
-		}
+	protected String getDescription() {
+		return DESCRIPTION;
+	}
+
+	@Override
+	protected String getOptionsCategory() {
+		return GhidraOptions.CATEGORY_BROWSER_POPUPS;
 	}
 
 	@Override
@@ -98,6 +99,7 @@ public class ProgramAddressRelationshipListingHover extends AbstractConfigurable
 
 		addFunctionInfo(program, loc, sb);
 		addDataInfo(program, loc, sb);
+		addByteSourceInfo(program, loc, sb);
 
 		return createTooltipComponent(sb.toString());
 	}
@@ -137,6 +139,21 @@ public class ProgramAddressRelationshipListingHover extends AbstractConfigurable
 		}
 
 		appendTableRow(sb, dataDescr, name, dataOffset);
+	}
+
+	private void addByteSourceInfo(Program program, Address loc, StringBuilder sb) {
+
+		AddressSourceInfo addressSourceInfo = program.getMemory().getAddressSourceInfo(loc);
+		if (addressSourceInfo == null) {
+			return;
+		}
+		if (addressSourceInfo.getFileName() == null) {
+			return;
+		}
+		String filename = StringUtilities.trim(addressSourceInfo.getFileName(), MAX_FILENAME_SIZE);
+		long fileOffset = addressSourceInfo.getFileOffset();
+		String dataDescr = "Byte Source Offset";
+		appendTableRow(sb, dataDescr, "File: " + filename, fileOffset);
 	}
 
 	private void addFunctionInfo(Program program, Address loc, StringBuilder sb) {

@@ -15,8 +15,7 @@
  */
 package ghidra.test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,20 +24,20 @@ import org.junit.After;
 
 import ghidra.app.plugin.core.codebrowser.CodeBrowserPlugin;
 import ghidra.framework.plugintool.PluginTool;
-import ghidra.generic.function.ExceptionalConsumer;
-import ghidra.generic.function.ExceptionalFunction;
 import ghidra.program.model.address.*;
 import ghidra.program.model.listing.*;
 import ghidra.program.util.ProgramLocation;
 import ghidra.util.exception.AssertException;
 import util.CollectionUtils;
+import utility.function.ExceptionalConsumer;
+import utility.function.ExceptionalFunction;
 
 /**
  * A convenience base class for creating tests that use the default tool and open a program.
  * This class will create for you a tool, a {@link TestEnv} and will open the program 
  * specified by {@link #getProgramName()}.
  * 
- * <P>To use this class, you must call {@link #initialize()} from your test or <tt>setUp</tt> 
+ * <P>To use this class, you must call {@link #initialize()} from your test or <code>setUp</code> 
  * method.
  * 
  * <P>Note: if you are loading a pre-existing program, then simply override 
@@ -78,7 +77,6 @@ public abstract class AbstractProgramBasedTest extends AbstractGhidraHeadedInteg
 
 	@After
 	public void tearDown() throws Exception {
-		env.release(program);
 		env.dispose();
 	}
 

@@ -32,6 +32,16 @@ public interface TaskMonitor {
 
 	public static final TaskMonitor DUMMY = new StubTaskMonitor();
 
+	/**
+	 * Returns the given task monitor if it is not {@code null}.  Otherwise, a {@link #DUMMY} 
+	 * monitor is returned.
+	 * @param tm the monitor to check for {@code null}
+	 * @return a non-null task monitor
+	 */
+	public static TaskMonitor dummyIfNull(TaskMonitor tm) {
+		return tm == null ? DUMMY : tm;
+	}
+
 	/** A value to indicate that this monitor has no progress value set */
 	public static final int NO_PROGRESS_VALUE = -1;
 
@@ -57,6 +67,12 @@ public interface TaskMonitor {
 	public void setMessage(String message);
 
 	/**
+	 * Gets the last set message of this monitor
+	 * @return the message
+	 */
+	public String getMessage();
+
+	/**
 	 * Sets the current progress value
 	 * @param value progress value
 	 */
@@ -74,7 +90,7 @@ public interface TaskMonitor {
 	 * Set the progress maximum value
 	 * <p><b>
 	 * Note: setting this value will reset the progress to be the max if the progress is currently
-	 * greater than the new new max value.
+	 * greater than the new new max value.</b>
 	 * @param max maximum value for progress
 	 */
 	public void setMaximum(long max);
@@ -90,6 +106,12 @@ public interface TaskMonitor {
 	 * @param indeterminate true if indeterminate
 	 */
 	public void setIndeterminate(boolean indeterminate);
+
+	/**
+	 * Returns true if this monitor shows no progress
+	 * @return true if this monitor shows no progress
+	 */
+	public boolean isIndeterminate();
 
 	/**
 	 * Check to see if this monitor has been canceled

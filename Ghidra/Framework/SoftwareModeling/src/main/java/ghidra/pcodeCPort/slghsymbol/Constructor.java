@@ -16,15 +16,16 @@
 package ghidra.pcodeCPort.slghsymbol;
 
 import java.io.PrintStream;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
 import org.jdom.Element;
 
 import generic.stl.IteratorSTL;
 import generic.stl.VectorSTL;
 import ghidra.pcodeCPort.context.*;
+import ghidra.pcodeCPort.semantics.ConstTpl.const_type;
 import ghidra.pcodeCPort.semantics.ConstructTpl;
+import ghidra.pcodeCPort.semantics.HandleTpl;
 import ghidra.pcodeCPort.sleighbase.SleighBase;
 import ghidra.pcodeCPort.slghpatexpress.*;
 import ghidra.pcodeCPort.utils.XmlUtils;
@@ -47,6 +48,7 @@ public class Constructor {
 	private int firstwhitespace; // Index of first whitespace piece in -printpiece-
 	private int flowthruindex; // if >=0 then print only a single operand no markup
 	private boolean inerror;
+	private int sourceFileIndex = -1;    //source file index
 
 	public TokenPattern getPattern() {
 		return pattern;
@@ -74,6 +76,22 @@ public class Constructor {
 
 	public int getLineno() {
 		return location == null ? 0 : location.lineno;
+	}
+
+	/**
+	 * Set the source file index
+	 * @param index index
+	 */
+	public void setSourceFileIndex(int index) {
+		sourceFileIndex = index;
+	}
+
+	/**
+	 * Return the source file index
+	 * @return index
+	 */
+	public int getIndex() {
+		return sourceFileIndex;
 	}
 
 	public void addContext(VectorSTL<ContextChange> vec) {
@@ -129,6 +147,34 @@ public class Constructor {
 			else {
 				check.set(i, 2);
 			}
+		}
+	}
+
+	public void collectLocalExports(ArrayList<Long> results) {
+		if (templ == null) {
+			return;
+		}
+		HandleTpl handle = templ.getResult();
+		if (handle == null) {
+			return;
+		}
+		if (handle.getSpace().isConstSpace()) {
+			return;	// Even if the value is dynamic, the pointed to value won't get used
+		}
+		if (handle.getPtrSpace().getType() != const_type.real) {
+			if (handle.getTempSpace().isUniqueSpace()) {
+				results.add(handle.getTempOffset().getReal());
+			}
+			return;
+		}
+		if (handle.getSpace().isUniqueSpace()) {
+			results.add(handle.getPtrOffset().getReal());
+			return;
+		}
+		if (handle.getSpace().getType() == const_type.handle) {
+			int handleIndex = handle.getSpace().getHandleIndex();
+			OperandSymbol opSym = getOperand(handleIndex);
+			opSym.collectLocalValues(results);
 		}
 	}
 
@@ -330,6 +376,8 @@ public class Constructor {
 		s.print(minimumlength);
 		s.append("\"");
 		s.append(" line=\"");
+		s.print(sourceFileIndex);
+		s.append(":");
 		s.print(getLineno());
 		s.append("\">\n");
 		for (int i = 0; i < operands.size(); ++i) {
@@ -542,7 +590,11 @@ public class Constructor {
 				}
 			}
 			else if (defexp != null) {
-				oppattern.push_back(defexp.genMinPattern(oppattern));
+				TokenPattern tmppat = defexp.genMinPattern(oppattern);
+				if (null == tmppat) {
+					throw new SleighError("operand " + sym.getName() + " has an issue", location);
+				}
+				oppattern.push_back(tmppat);
 			}
 			else {
 				throw new SleighError("operand " + sym.getName() + " is undefined", location);
@@ -570,8 +622,9 @@ public class Constructor {
 		// in bytes
 
 		OperandResolve resolve = new OperandResolve(operands);
-		if (!pateq.resolveOperandLeft(resolve))
+		if (!pateq.resolveOperandLeft(resolve)) {
 			throw new SleighError("Unable to resolve operand offsets", location);
+		}
 
 		// Unravel relative offsets to absolute (if possible)
 		for (int i = 0; i < operands.size(); ++i) {

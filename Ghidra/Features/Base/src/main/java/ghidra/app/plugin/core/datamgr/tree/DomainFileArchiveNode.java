@@ -49,8 +49,8 @@ public class DomainFileArchiveNode extends ArchiveNode {
 
 	private String domainFileInfoString;
 
-	public DomainFileArchiveNode(DomainFileArchive archive) {
-		super(archive);
+	public DomainFileArchiveNode(DomainFileArchive archive, ArrayPointerFilterState filterState) {
+		super(archive, filterState);
 
 		updateDomainFileInfo();
 	}
@@ -109,16 +109,15 @@ public class DomainFileArchiveNode extends ArchiveNode {
 	}
 
 	@Override
-	public boolean isSystemNode() {
-		return true;
+	public boolean canDelete() {
+		return false;
 	}
 
 	@Override
 	public Icon getIcon(boolean expanded) {
-		DomainFile df = ((DomainFileArchive) archive).getDomainFile();
-		ImageIcon baseIcon = archive.getIcon(expanded);
 
-		BackgroundIcon bgIcon = new BackgroundIcon(24, 16, df.isVersioned());
+		ImageIcon baseIcon = archive.getIcon(expanded);
+		BackgroundIcon bgIcon = new BackgroundIcon(24, 16, isVersioned);
 		MultiIcon multiIcon = new MultiIcon(bgIcon);
 		multiIcon.addIcon(baseIcon);
 
